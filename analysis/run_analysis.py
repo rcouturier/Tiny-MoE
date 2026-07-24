@@ -27,12 +27,13 @@ def batched(seqs, bs):
 
 
 @torch.inference_mode()
-def domain_ppl(model, seqs, device, bs, ablate_layer_experts=None, ablate_shared=False):
+def domain_ppl(model, seqs, device, bs, ablate_layer_experts=None, ablate_shared=False,
+               ablate_routed=False):
     tot_loss, tot_tok = 0.0, 0
     for ids, lab, pos in batched(seqs, bs):
         ids, lab, pos = ids.to(device), lab.to(device), pos.to(device)
-        logits, _ = model(ids, position_ids=pos,
-                          ablate_layer_experts=ablate_layer_experts, ablate_shared=ablate_shared)
+        logits, _ = model(ids, position_ids=pos, ablate_layer_experts=ablate_layer_experts,
+                          ablate_shared=ablate_shared, ablate_routed=ablate_routed)
         loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), lab.reshape(-1),
                                reduction="sum")
         tot_loss += loss.item(); tot_tok += lab.numel()

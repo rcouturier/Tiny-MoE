@@ -325,6 +325,7 @@ class MoE(nn.Module):
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.moe_intermediate_size
         self.capacity_factor = config.capacity_factor
+        self.use_shared_expert = getattr(config, "use_shared_expert", True)
 
         self.router = nn.Linear(self.hidden_size, self.num_experts, bias=False)
 
@@ -335,17 +336,19 @@ class MoE(nn.Module):
         self.w2 = nn.Parameter(
             torch.empty(self.num_experts,self.intermediate_size, self.hidden_size,)
         )
-        self.shared_w13 = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=False)
-        self.shared_w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        if self.use_shared_expert:
+            self.shared_w13 = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=False)
+            self.shared_w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.reset_parameters()
 
     def reset_parameters(self):
-        
+
         nn.init.xavier_uniform_(self.router.weight)
         nn.init.xavier_uniform_(self.w13)
         nn.init.xavier_uniform_(self.w2)
-        nn.init.xavier_uniform_(self.shared_w13.weight)
-        nn.init.xavier_uniform_(self.shared_w2.weight)
+        if self.use_shared_expert:
+            nn.init.xavier_uniform_(self.shared_w13.weight)
+            nn.init.xavier_uniform_(self.shared_w2.weight)
 
     def forward(self, x: torch.Tensor):
         bsz, seq_len, hidden = x.shape
@@ -355,10 +358,13 @@ class MoE(nn.Module):
         K = self.num_experts_per_token
         I = self.intermediate_size
 
-        gate_up_shared = self.shared_w13(x_flat) #[N,D] @ [D,2I] - > [N,2I] 
-        gate_s, up_s = gate_up_shared.chunk(2, dim=-1) # gate_S [N,I] up_s [N,I]
-        shared_out = self.shared_w2(F.silu(gate_s) * up_s) # [N,I] @ [N,I] - > [N,I] @ [I,D] - > [N,D]
-        
+        if self.use_shared_expert:
+            gate_up_shared = self.shared_w13(x_flat) #[N,D] @ [D,2I] - > [N,2I]
+            gate_s, up_s = gate_up_shared.chunk(2, dim=-1) # gate_S [N,I] up_s [N,I]
+            shared_out = self.shared_w2(F.silu(gate_s) * up_s) # [N,I] @ [N,I] - > [N,I] @ [I,D] - > [N,D]
+        else:
+            shared_out = x_flat.new_zeros((N, hidden))
+
         router_logits = self.router(x_flat).to(torch.float32)  # [N,D] @ [D,E] - > [N,E]
 
         log_z = torch.logsumexp(router_logits, dim=-1)              # [N]  

@@ -54,6 +54,7 @@ def main():
     ap.add_argument("--grad-accum", type=int, default=1)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--warmup", type=int, default=150)
+    ap.add_argument("--no-shared", action="store_true", help="D1 variant: no shared expert")
     ap.add_argument("--aux-coef", type=float, default=1e-2)
     ap.add_argument("--z-coef", type=float, default=1e-3)
     ap.add_argument("--save-every", type=int, default=500)
@@ -71,7 +72,7 @@ def main():
         tok.pad_token = tok.eos_token
 
     config = ModelConfig(num_layers=args.num_layers, num_experts=args.num_experts,
-                         max_seq_len=args.seq_len)
+                         max_seq_len=args.seq_len, use_shared_expert=not args.no_shared)
     model = Transformer(config).to(device)
     model.train()
     n_params = sum(p.numel() for p in model.parameters())

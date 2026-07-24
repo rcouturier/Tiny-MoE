@@ -36,27 +36,35 @@ class AnalysisMoE(nn.Module):
         self.num_experts_per_token = config.num_experts_per_token
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.moe_intermediate_size
+        self.use_shared_expert = getattr(config, "use_shared_expert", True)
 
         self.router = nn.Linear(self.hidden_size, self.num_experts, bias=False)
         self.w13 = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.intermediate_size))
         self.w2 = nn.Parameter(torch.empty(self.num_experts, self.intermediate_size, self.hidden_size))
-        self.shared_w13 = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=False)
-        self.shared_w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        if self.use_shared_expert:
+            self.shared_w13 = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=False)
+            self.shared_w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
     @torch.inference_mode()
     def forward(self, x, ablate_experts: Optional[Iterable[int]] = None,
-                ablate_shared: bool = False, capture: Optional[RoutingCapture] = None):
+                ablate_shared: bool = False, ablate_routed: bool = False,
+                capture: Optional[RoutingCapture] = None):
         bsz, seq_len, hidden = x.shape
         x_flat = x.reshape(-1, hidden)
         N = x_flat.shape[0]
         E, K = self.num_experts, self.num_experts_per_token
 
         # shared expert
-        g = self.shared_w13(x_flat)
-        gs, us = g.chunk(2, dim=-1)
-        shared_out = self.shared_w2(F.silu(gs) * us)
-        if ablate_shared:
-            shared_out = torch.zeros_like(shared_out)
+        if self.use_shared_expert and not ablate_shared:
+            g = self.shared_w13(x_flat)
+            gs, us = g.chunk(2, dim=-1)
+            shared_out = self.shared_w2(F.silu(gs) * us)
+        else:
+            shared_out = x_flat.new_zeros((N, hidden))
+
+        # whole routed branch removed (fair like-for-like vs shared-branch removal)
+        if ablate_routed and capture is None:
+            return shared_out.view(bsz, seq_len, hidden)
 
         # router
         router_logits = self.router(x_flat).to(torch.float32)  # [N, E]
@@ -110,10 +118,11 @@ class AnalysisBlock(nn.Module):
         self.ls2 = nn.Parameter(torch.ones(1) * 0.1)
 
     @torch.inference_mode()
-    def forward(self, x, position_ids=None, ablate_experts=None, ablate_shared=False, capture=None):
+    def forward(self, x, position_ids=None, ablate_experts=None, ablate_shared=False,
+                ablate_routed=False, capture=None):
         h = x + self.ls1 * self.attn(self.attn_norm(x), position_ids)
         moe_out = self.moe(self.ffn_norm(h), ablate_experts=ablate_experts,
-                           ablate_shared=ablate_shared, capture=capture)
+                           ablate_shared=ablate_shared, ablate_routed=ablate_routed, capture=capture)
         return h + self.ls2 * moe_out
 
 
@@ -134,13 +143,15 @@ class AnalysisTransformer(nn.Module):
     def forward(self, input_ids, position_ids=None,
                 ablate_layer_experts=None,   # dict[layer_idx] -> iterable[int]
                 ablate_shared=False,
+                ablate_routed=False,
                 capture_routing=False):
         x = self.embed_tokens(input_ids)
         captures = [] if capture_routing else None
         for li, layer in enumerate(self.layers):
             cap = RoutingCapture() if capture_routing else None
             ael = ablate_layer_experts.get(li) if ablate_layer_experts else None
-            x = layer(x, position_ids, ablate_experts=ael, ablate_shared=ablate_shared, capture=cap)
+            x = layer(x, position_ids, ablate_experts=ael, ablate_shared=ablate_shared,
+                      ablate_routed=ablate_routed, capture=cap)
             if capture_routing:
                 captures.append(cap)
         x = self.norm(x)

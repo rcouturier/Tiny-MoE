@@ -79,6 +79,7 @@ class ModelConfig:
     num_experts_per_token: int = 2
     moe_intermediate_size: int = 1024
     capacity_factor: float = 1.25
+    use_shared_expert: bool = True
 
 
 class TrainConfig:

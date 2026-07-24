@@ -66,6 +66,87 @@ def permutation_control(expert, domain, E, D, n_perm=30, seed=0):
     return float(np.mean(vals)), float(np.std(vals))
 
 
+def _nmi_from_joint(j):
+    total = j.sum()
+    if total == 0:
+        return 0.0
+    p = j / total
+    pe = p.sum(axis=1, keepdims=True)
+    pd = p.sum(axis=0, keepdims=True)
+    mask = p > 0
+    mi = np.sum(p[mask] * np.log(p[mask] / (pe @ np.ones_like(pd))[mask] / (np.ones_like(pe) @ pd)[mask]))
+    pdv = pd.ravel()
+    hd = -np.sum(pdv[pdv > 0] * np.log(pdv[pdv > 0]))
+    return float(mi / hd) if hd > 0 else 0.0
+
+
+def soft_nmi(topk_idx, topk_w, domain, E, D):
+    """NMI using the gate-weighted (soft, top-k) routing distribution instead of
+    the top-1 argmax. More sensitive: a token contributes its gate weights to all
+    its selected experts. topk_idx/topk_w: [N, K]; domain: [N]."""
+    topk_idx = np.asarray(topk_idx); topk_w = np.asarray(topk_w); domain = np.asarray(domain)
+    K = topk_idx.shape[1]
+    j = np.zeros((E, D), dtype=np.float64)
+    dom_rep = np.repeat(domain, K)
+    np.add.at(j, (topk_idx.ravel(), dom_rep), topk_w.ravel())
+    return _nmi_from_joint(j)
+
+
+def conditional_nmi(expert, domain, token_ids, E, D, min_count=30):
+    """I(Expert;Domain | Token) / H(Domain | Token): domain information in routing
+    *after* removing anything explainable by token identity. Compared against the
+    unconditional NMI on the same token subset. If conditional stays high, routing
+    is genuinely context/domain-driven, not a relabelling of token frequencies."""
+    expert = np.asarray(expert); domain = np.asarray(domain); token_ids = np.asarray(token_ids)
+    uniq, counts = np.unique(token_ids, return_counts=True)
+    keep = uniq[counts >= min_count]
+    sub = np.isin(token_ids, keep)
+    e_s, d_s, t_s = expert[sub], domain[sub], token_ids[sub]
+    total = len(t_s)
+    if total == 0:
+        return dict(conditional=0.0, unconditional=0.0, n_tokens=0)
+    I_cond, H_cond = 0.0, 0.0
+    used = 0
+    for t in keep:
+        m = t_s == t
+        dt = d_s[m]
+        if len(np.unique(dt)) < 2:
+            continue
+        used += 1
+        pt = m.sum() / total
+        j = _joint(e_s[m], dt, E, D)
+        # I(E;D|T=t) and H(D|T=t)
+        p = j / j.sum()
+        pe = p.sum(axis=1, keepdims=True); pd = p.sum(axis=0, keepdims=True)
+        mask = p > 0
+        mi = np.sum(p[mask] * np.log(p[mask] / (pe @ np.ones_like(pd))[mask] / (np.ones_like(pe) @ pd)[mask]))
+        pdv = pd.ravel(); hd = -np.sum(pdv[pdv > 0] * np.log(pdv[pdv > 0]))
+        I_cond += pt * mi; H_cond += pt * hd
+    return dict(
+        conditional=float(I_cond / H_cond) if H_cond > 0 else 0.0,
+        unconditional=_nmi_from_joint(_joint(e_s, d_s, E, D)),
+        n_tokens=used,
+    )
+
+
+def permutation_test(group_a, group_b):
+    """Exact two-sided permutation test on the difference of means between two
+    small groups (e.g. NMI across seeds for two conditions). Returns (diff, p)."""
+    from itertools import combinations
+    a = np.asarray(group_a, dtype=float); b = np.asarray(group_b, dtype=float)
+    pooled = np.concatenate([a, b]); na = len(a)
+    obs = a.mean() - b.mean()
+    idx = list(range(len(pooled)))
+    count, total = 0, 0
+    for combo in combinations(idx, na):
+        mask = np.zeros(len(pooled), dtype=bool); mask[list(combo)] = True
+        diff = pooled[mask].mean() - pooled[~mask].mean()
+        if abs(diff) >= abs(obs) - 1e-12:
+            count += 1
+        total += 1
+    return float(obs), float(count / total)
+
+
 def _jsd(dists):
     """Jensen-Shannon divergence among a list of prob vectors (uniform weights)."""
     dists = np.stack(dists)
