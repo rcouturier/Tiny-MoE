@@ -393,7 +393,18 @@ class MLA(nn.Module):
         scores = (scores_nope + scores_rope) * self.softmax_scale
 
         if attention_mask is not None:
-            scores += attention_mask
+            scores = scores + attention_mask
+        elif seq_len > 1:
+            # Causal mask over the packed KV cache. Query index i sits at absolute
+            # position start+i; key index j at position j. Allow j <= start+i.
+            q_pos = torch.arange(start, end, device=x.device).unsqueeze(-1)  # [T, 1]
+            k_pos = torch.arange(end, device=x.device).unsqueeze(0)          # [1, T_cache]
+            causal_mask = torch.where(
+                k_pos <= q_pos,
+                torch.zeros((), device=x.device, dtype=scores.dtype),
+                torch.full((), float("-inf"), device=x.device, dtype=scores.dtype),
+            )  # [T, T_cache]
+            scores = scores + causal_mask
 
         attn = torch.softmax(scores, dim=-1)
         #[B,H,T,T_cache] @ [B,T_cache,Dc] - > [B,H,T,Dc]
