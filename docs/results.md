@@ -63,29 +63,62 @@ domain-niched; the two rise together.
 ## Negative result — Removing the shared expert does *not* sharpen specialization (retracted)
 
 At 3 seeds, no-shared models showed cleanly higher NMI (0.0100 vs 0.0078, perfect rank
-separation). This **did not replicate**: at 4 seeds the difference collapses to
-0.0093 ± 0.0013 vs 0.0085 ± 0.0015, permutation p = 0.543 (overlapping). We report this as a
-null result — the 3-seed separation was small-sample noise, caught by replication. No claim
-that the shared expert suppresses routed specialization *by displacement*; the suppression
-lever is the load-balancing loss (Finding 2), not the shared expert's presence.
+separation) — suggesting "removing the shared expert sharpens routed specialization." This
+**did not replicate**: at 4 seeds (default `aux=1e-2`) the difference collapses to
+0.0093 ± 0.0013 vs 0.0085 ± 0.0015, permutation p = 0.543. Worse for the naive hypothesis,
+once balancing is turned off (`aux=0`, where the effect is measurable) the sign **reverses**:
+removing the shared expert *lowers* specialization (Finding 4). The original D1 hypothesis is
+not merely unsupported — it is backwards. The 3-seed separation was small-sample noise, caught
+by replication.
 
-## Interaction (shared × aux) — pending
+## Finding 3 — Experts specialize by surface form first, domain second, position not at all
 
-Does the shared expert still dominate at `aux=0` (where routed experts specialize more)? And
-does removing it change specialization once balancing is off? 2×2 {shared, no-shared} ×
-{aux=0, aux=1e-2}, 4 seeds. *(filled by the running experiment.)*
+soft NMI(Expert; axis) on the `aux=0` models (4 seeds; permutation control in parens):
 
-## What axis do experts specialize by? — pending
+| axis | soft NMI |
+|---|---|
+| **surface class** (word / number / punct / space) | **0.050 ± 0.006** (ctl 0.0001) |
+| domain | 0.034 ± 0.006 (ctl 0.0000) |
+| token frequency | 0.028 ± 0.003 (ctl 0.0001) |
+| sequence position | 0.0003 ± 0.0000 (ctl 0.0000) |
 
-soft NMI(Expert; axis) for axis ∈ {domain, surface-class, token-frequency, sequence-position}
-on the `aux=0` models, to test whether the (modest) specialization is by topic or, as in
-Mixtral, more by token/surface form. *(filled by the running experiment.)*
+Experts organize **primarily by token surface form**; domain is a secondary, correlated axis
+(math carries more digits/symbols); position plays no role. This reproduces, in a controlled
+labelled setting, the Mixtral observation that experts specialize more by token/syntax than by
+topic.
 
-## Scale — pending
+## Finding 4 — Shared and routed experts are *complements* for specialization
 
-Domain-NMI and shared-branch dominance at `aux=0` for training budgets of 3k / 6k / 12k steps
-(≈ 49M / 98M / 197M tokens), to see whether the effects strengthen or fade with more tokens.
-*(filled by the running experiment.)*
+2×2 {shared, no-shared} × {aux=0, aux=1e-2}, 4 seeds. At `aux=1e-2` there is no difference
+(both crushed by balancing, p=0.543). At **`aux=0`**, where specialization is visible:
+
+| | routed soft NMI | remove all routed | remove shared | PPL |
+|---|---|---|---|---|
+| **with shared** | **0.034 ± 0.006** | +0.46 | +4.81 | 4.49 |
+| no shared | 0.015 ± 0.001 | +6.50 | — | 4.60 |
+
+Permutation test Δ=+0.019, **p=0.029**. **Removing the shared expert *lowers* routed
+specialization (0.034 → 0.015), the opposite of the naive D1 hypothesis.** The shared expert
+acts as a common-capability backstop that *frees* routed experts to specialize (and to become
+imbalanced: load imbalance 0.187 with shared vs 0.109 without). This is the DeepSeekMoE
+intuition — shared and routed are **complements, not substitutes** — but it is only visible
+once the load-balancing loss is off. Note that shared-branch computational dominance persists
+here too (+4.81 vs +0.46).
+
+## Finding 5 — Scale: shared dominance strengthens; domain-NMI does not clearly grow
+
+`aux=0`, training budgets 3k / 6k / 12k steps (≈ 49M / 98M / 197M tokens; 2 seeds):
+
+| budget | PPL | routed soft NMI | remove shared ΔPPL |
+|---|---|---|---|
+| 3k | 4.48 | 0.033 ± 0.005 | +4.91 |
+| 6k | 4.04 | 0.034 ± 0.001 | +5.34 |
+| 12k | 3.59 | 0.041 ± 0.005 | +5.89 |
+
+Perplexity drops as expected. **Shared-expert dominance grows monotonically** with more tokens
+(+4.9 → +5.9). **Domain-NMI does not increase significantly** (pairwise p ≥ 0.33 over 2 seeds),
+suggesting the modest domain specialization is partly intrinsic to this scale rather than mere
+undertraining. (Two seeds, narrow token range — indicative, not conclusive.)
 
 ## Limitations
 
@@ -98,9 +131,22 @@ than a fully disjoint split.
 
 ## Framing
 
-Two robust, causal, replicated findings at small scale: (1) in a shared-expert MoE the shared
-expert does most of the FFN work and the routed experts are near-redundant; (2) the degree of
-routed domain-specialization is directly controlled by the load-balancing coefficient, at no
-perplexity cost. Together they suggest the routed experts are "under-used" both because the
-shared expert absorbs the common computation and because balancing represses their
-specialization — a controlled, quantified account of a tension usually discussed only at scale.
+A controlled, causal, seed-replicated account of expert organization in a small shared-expert
+MoE:
+
+1. **The shared expert is the computational workhorse** — removing all 8 routed experts costs
+   far less than removing the lone shared expert (+0.5 vs +4–6 PPL), and its dominance
+   *strengthens* with scale.
+2. **The load-balancing loss is the master control on specialization** — sweeping it moves
+   domain-NMI ~4× monotonically, at no perplexity cost.
+3. **Specialization is by surface form first, domain second** — experts sort tokens more by
+   lexical class than by topic; position is irrelevant.
+4. **Shared and routed experts are complements, not substitutes** — the shared expert provides
+   a common-capability backstop that *enables* routed experts to specialize; removing it
+   *reduces* specialization once balancing is off.
+
+The methodological contribution is the pairing of a domain-labelled probe with causal branch
+ablation, a load-balancing sweep, and strict seed replication — which, notably, overturned two
+of our own early conclusions (the "no-shared sharpens" separation and the "substitutes"
+framing). Both were small-sample or under-controlled artifacts that replication and the
+`aux=0` interaction corrected.
