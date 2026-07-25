@@ -49,6 +49,7 @@ def main():
     ap.add_argument("--steps", type=int, default=1500)
     ap.add_argument("--num-layers", type=int, default=8)
     ap.add_argument("--num-experts", type=int, default=8)
+    ap.add_argument("--top-k", type=int, default=2)
     ap.add_argument("--seq-len", type=int, default=512)
     ap.add_argument("--batch", type=int, default=24)
     ap.add_argument("--grad-accum", type=int, default=1)
@@ -72,7 +73,8 @@ def main():
         tok.pad_token = tok.eos_token
 
     config = ModelConfig(num_layers=args.num_layers, num_experts=args.num_experts,
-                         max_seq_len=args.seq_len, use_shared_expert=not args.no_shared)
+                         num_experts_per_token=args.top_k, max_seq_len=args.seq_len,
+                         use_shared_expert=not args.no_shared)
     model = Transformer(config).to(device)
     model.train()
     n_params = sum(p.numel() for p in model.parameters())

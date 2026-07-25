@@ -80,6 +80,38 @@ def _nmi_from_joint(j):
     return float(mi / hd) if hd > 0 else 0.0
 
 
+def _mi_h(j):
+    """Return (MI in nats, H(target) in nats) for a joint count matrix [E, T]."""
+    total = j.sum()
+    if total == 0:
+        return 0.0, 0.0
+    p = j / total
+    pe = p.sum(axis=1, keepdims=True); pt = p.sum(axis=0, keepdims=True)
+    mask = p > 0
+    mi = np.sum(p[mask] * np.log(p[mask] / (pe @ np.ones_like(pt))[mask] / (np.ones_like(pe) @ pt)[mask]))
+    ptv = pt.ravel(); h = -np.sum(ptv[ptv > 0] * np.log(ptv[ptv > 0]))
+    return float(mi), float(h)
+
+
+def conditional_nmi_general(expert, target, cond, E, n_target, n_cond, min_count=50):
+    """NMI(Expert; target | cond) = I(E;target|cond)/H(target|cond), and the
+    unconditional NMI(E;target) for reference. If the conditional collapses toward
+    0, `target`'s routing information was explained away by `cond` (the axes are
+    entangled and `cond` is the primary one)."""
+    expert = np.asarray(expert); target = np.asarray(target); cond = np.asarray(cond)
+    total = len(expert)
+    I, H = 0.0, 0.0
+    for c in range(n_cond):
+        m = cond == c
+        if m.sum() < min_count:
+            continue
+        pc = m.sum() / total
+        mi, h = _mi_h(_joint(expert[m], target[m], E, n_target))
+        I += pc * mi; H += pc * h
+    ju, hu = _mi_h(_joint(expert, target, E, n_target))
+    return dict(cond=(I / H if H > 0 else 0.0), uncond=(ju / hu if hu > 0 else 0.0))
+
+
 def soft_nmi(topk_idx, topk_w, domain, E, D):
     """NMI using the gate-weighted (soft, top-k) routing distribution instead of
     the top-1 argmax. More sensitive: a token contributes its gate weights to all
