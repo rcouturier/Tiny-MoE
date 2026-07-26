@@ -326,6 +326,7 @@ class MoE(nn.Module):
         self.intermediate_size = config.moe_intermediate_size
         self.capacity_factor = config.capacity_factor
         self.use_shared_expert = getattr(config, "use_shared_expert", True)
+        self.shared_dropout = getattr(config, "shared_dropout", 0.0)
 
         self.router = nn.Linear(self.hidden_size, self.num_experts, bias=False)
 
@@ -362,6 +363,11 @@ class MoE(nn.Module):
             gate_up_shared = self.shared_w13(x_flat) #[N,D] @ [D,2I] - > [N,2I]
             gate_s, up_s = gate_up_shared.chunk(2, dim=-1) # gate_S [N,I] up_s [N,I]
             shared_out = self.shared_w2(F.silu(gate_s) * up_s) # [N,I] @ [N,I] - > [N,I] @ [I,D] - > [N,D]
+            if self.training and self.shared_dropout > 0.0:
+                # drop the ENTIRE shared branch for a random fraction of tokens, so the
+                # routed experts must carry those tokens (breaks the shared monopoly).
+                keep = (torch.rand(N, 1, device=x.device) > self.shared_dropout).to(shared_out.dtype)
+                shared_out = shared_out * keep / (1.0 - self.shared_dropout)
         else:
             shared_out = x_flat.new_zeros((N, hidden))
 

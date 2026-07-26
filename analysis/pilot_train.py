@@ -56,6 +56,8 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--warmup", type=int, default=150)
     ap.add_argument("--no-shared", action="store_true", help="D1 variant: no shared expert")
+    ap.add_argument("--shared-dropout", type=float, default=0.0,
+                    help="per-token dropout of the shared branch during training")
     ap.add_argument("--aux-coef", type=float, default=1e-2)
     ap.add_argument("--z-coef", type=float, default=1e-3)
     ap.add_argument("--save-every", type=int, default=500)
@@ -75,7 +77,7 @@ def main():
 
     config = ModelConfig(num_layers=args.num_layers, num_experts=args.num_experts,
                          num_experts_per_token=args.top_k, max_seq_len=args.seq_len,
-                         use_shared_expert=not args.no_shared)
+                         use_shared_expert=not args.no_shared, shared_dropout=args.shared_dropout)
     model = Transformer(config).to(device)
     model.train()
     n_params = sum(p.numel() for p in model.parameters())
