@@ -127,6 +127,28 @@ Perplexity drops as expected. **Shared-expert dominance grows monotonically** wi
 suggesting the modest domain specialization is partly intrinsic to this scale rather than mere
 undertraining. (Two seeds, narrow token range — indicative, not conclusive.)
 
+## Finding 6 — Shared dominance is not a granularity artifact (robust over #experts and top-k)
+
+Sweeping the number of routed experts (top-2, `aux=1e-2`, 2 seeds; monotonic trends, tiny std,
+though 2-seed permutation p floors at 0.333):
+
+| #experts | remove all routed | remove shared | soft NMI | load imbalance | PPL |
+|---|---|---|---|---|---|
+| 4 | +0.43 | +4.41 | 0.0047 | 0.037 | 4.51 |
+| 8 | +0.54 | +3.97 | 0.0071 | 0.021 | 4.46 |
+| 16 | +0.69 | +3.54 | 0.0118 | 0.014 | 4.43 |
+| 32 | +0.78 | +3.10 | 0.0176 | 0.009 | 4.42 |
+
+**Shared dominance persists at every granularity** — even with 32 routed experts, removing the
+shared expert costs +3.1 PPL vs +0.78 for removing all 32 routed experts (~4×). So Finding 1 is
+*not* an artifact of too many experts for too little data. Secondary trends: the routed branch
+grows gradually more useful with more experts (+0.43→+0.78) and more specialized (NMI ~4×), with
+lower per-expert imbalance but higher collective specialization.
+
+Top-k (8 experts): at **top-1**, domain specialization collapses to ≈ the control (soft NMI
+0.0007) and the routed branch is even less important (+0.16) while the shared expert dominates
+more (+6.2). Top-2 is needed for routed experts to contribute at all.
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
