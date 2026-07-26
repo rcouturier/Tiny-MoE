@@ -390,7 +390,7 @@ class MoE(nn.Module):
         
 
         load = counts.float() / (counts.sum() + 1e-9) #[E]
-        aux_loss = E * torch.dot(importance, load) 
+        aux_loss = E * (importance * load).sum()  # equiv. torch.dot; avoids a broken CUDA dot kernel
         z_loss = torch.mean(log_z ** 2)
         
 

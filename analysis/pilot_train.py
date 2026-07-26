@@ -61,6 +61,7 @@ def main():
     ap.add_argument("--save-every", type=int, default=500)
     ap.add_argument("--log-every", type=int, default=25)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--num-workers", type=int, default=2)
     ap.add_argument("--out", type=str, required=True)
     args = ap.parse_args()
 
@@ -81,8 +82,11 @@ def main():
     print(f"[model] {n_params/1e6:.1f}M params | {args.num_layers} layers | {args.num_experts} experts")
 
     ds = Training_Streaming_Dataset(config, tok, seed=args.seed, shuffle_buffer_size=20_000)
-    dl = DataLoader(ds, batch_size=args.batch, num_workers=2, prefetch_factor=2,
-                    persistent_workers=True, pin_memory=True, drop_last=True)
+    dl_kwargs = dict(batch_size=args.batch, pin_memory=True, drop_last=True,
+                     num_workers=args.num_workers)
+    if args.num_workers > 0:
+        dl_kwargs.update(prefetch_factor=2, persistent_workers=True)
+    dl = DataLoader(ds, **dl_kwargs)
 
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95), weight_decay=0.1)
 
