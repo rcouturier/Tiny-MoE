@@ -82,10 +82,17 @@ soft NMI(Expert; axis) on the `aux=0` models (4 seeds; permutation control in pa
 | token frequency | 0.028 ± 0.003 (ctl 0.0001) |
 | sequence position | 0.0003 ± 0.0000 (ctl 0.0000) |
 
-Experts organize **primarily by token surface form**; domain is a secondary, correlated axis
-(math carries more digits/symbols); position plays no role. This reproduces, in a controlled
-labelled setting, the Mixtral observation that experts specialize more by token/syntax than by
-topic.
+Experts organize **primarily by token surface form**; domain is a secondary axis; position
+plays no role. This reproduces, in a controlled labelled setting, the Mixtral observation that
+experts specialize more by token/syntax than by topic.
+
+**Disentanglement (conditional MI).** Because these axes are correlated (math carries more
+digits/symbols), we check whether one explains the others via NMI(Expert; X | Y). Domain
+routing information is **fully retained** under conditioning: `I(E;domain|surface)` = 100% of
+`I(E;domain)` (and 100% conditioning on frequency). Surface is likewise ~unattenuated by domain
+(105%). Only frequency is partly absorbed by surface (82%). So surface, domain, and frequency
+are **separable axes** — domain specialization is genuine and *not* an artifact of surface-form
+correlation, and surface is the largest independent axis.
 
 ## Finding 4 — Shared and routed experts are *complements* for specialization
 
