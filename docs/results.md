@@ -149,6 +149,34 @@ Top-k (8 experts): at **top-1**, domain specialization collapses to ≈ the cont
 0.0007) and the routed branch is even less important (+0.16) while the shared expert dominates
 more (+6.2). Top-2 is needed for routed experts to contribute at all.
 
+## Finding 7 — The shared-expert monopoly is benign, not a pathology (falsified hypothesis)
+
+We hypothesized that the shared expert *progressively monopolizes* computation and *starves*
+the routed experts — a training pathology. Two experiments (3 seeds, 6000 steps each):
+
+**The race (baseline, aux=1e-2).** The shared branch dominates from very early (93% of total
+ablation impact by step 1000) and stays dominant, but its relative share *decreases* slightly
+over training (0.93 → 0.82) — routed experts slowly catch up, they are not increasingly
+starved. Routed NMI is flat (~0.007) throughout. (This tempers an earlier coarse-sweep
+impression that shared dominance strictly grows.)
+
+**The intervention (per-token shared-branch dropout, p=0.3).** This mechanically breaks the
+monopoly: at step 6000 the shared branch becomes irrelevant (remove-shared ΔPPL +0.08) and the
+routed branch carries everything (remove-routed +5.63). But the payoff is null:
+
+| | soft NMI | base PPL |
+|---|---|---|
+| baseline | 0.0072 ± 0.0019 | **4.02** |
+| shared-dropout 0.3 | 0.0085 ± 0.0003 | 4.05 |
+
+Specialization does not meaningfully increase (p=0.60) and PPL is slightly *worse* (+0.03,
+consistent across seeds). **Forcing the computation out of the shared expert reproduces the same
+loss without unlocking specialization.** The shared/routed split is therefore a near-neutral
+reparametrization: the shared expert is simply the convenient locus for common computation, not
+a mechanism suppressing otherwise-useful routed experts. The hypothesis is falsified. Practical
+implication: at this scale the routed experts are over-parametrized regardless of the shared
+expert — their under-use reflects a lack of *needed* specialized computation, not suppression.
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
