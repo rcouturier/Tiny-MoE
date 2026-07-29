@@ -179,21 +179,29 @@ expert — their under-use reflects a lack of *needed* specialized computation, 
 
 ## Finding 8 — Shared dominance / routed redundancy is largely an undertraining artifact
 
-Training a proper baseline (`base1b`: 8 experts, 30k steps ≈ 983M tokens, final held-out
-ppl 2.98 vs the 49M-token pilots' ~90) and measuring branch importance vs tokens seen:
+Branch importance as a function of tokens seen, over a **constant-batch** (64), **4-seed**
+training trajectory (mean ± std; remove = ablate the whole branch, measure ΔPPL on held-out):
 
-| tokens | remove all 8 routed | remove shared | soft NMI | held-out PPL |
-|---|---|---|---|---|
-| 49M (pilots) | +0.55 | +4.0 | 0.0072 | ~4.5 |
-| 197M | +1.53 | +2.38 | 0.0172 | 3.58 |
-| 983M | **+2.65** | **+2.60** | 0.0207 | 2.98 |
+| tokens | held-out PPL | remove shared | remove all 8 routed | routed NMI | shared share |
+|---|---|---|---|---|---|
+| 98M | 4.18 | **+3.44 ± 0.17** | +0.82 ± 0.03 | 0.0121 | **0.81** |
+| 197M | 3.63 | +2.37 ± 0.17 | +1.58 ± 0.06 | 0.0148 | 0.60 |
+| **295M** | 3.41 | +1.99 ± 0.14 | +1.98 ± 0.06 | 0.0161 | **0.50** |
+| 491M | 3.20 | +1.99 ± 0.16 | +2.25 ± 0.01 | 0.0168 | 0.47 |
+| 688M | 3.07 | +2.21 ± 0.16 | +2.38 ± 0.03 | 0.0177 | 0.48 |
+| 983M | 3.00 | +2.45 ± 0.18 | +2.48 ± 0.11 | 0.0174 | 0.50 |
 
-At 1B tokens the shared and routed branches are **balanced** (+2.60 vs +2.65), versus a ~7×
-shared advantage at 49M. **The "shared monopoly" and "routed redundancy" of Findings 1/6 are
-largely artifacts of undertraining that dissolve with adequate tokens**; specialization also
-grows ~3×. This is the most useful takeaway of the study: small-scale MoE interpretability that
-trains on too few tokens (as ours did initially, and as many pilot studies do) systematically
-overstates expert redundancy and shared-expert dominance.
+At **98M tokens** (the regime of our pilots and of many toy studies) the shared expert carries
+**81%** of total ablation impact — the routed experts look nearly redundant. The crossover to
+balance occurs around **~295M tokens**, after which the shared and routed branches are equally
+important (share ≈ 0.5), stable through 1B. All 4 seeds follow the same trajectory with tight
+error bars; routed specialization grows in parallel (NMI 0.0008 → 0.017, plateauing ~300M).
+
+**The "shared monopoly" and "routed redundancy" of Findings 1/6 are undertraining artifacts.**
+This is the study's most useful, statistically-supported takeaway: small-scale MoE
+interpretability trained on too few tokens (as ours was initially, and as many pilot studies
+are) systematically overstates expert redundancy and shared-expert dominance — here the effect
+inverts within ~300M tokens.
 
 ## Distillation (preliminary, single-seed)
 
