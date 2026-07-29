@@ -177,6 +177,41 @@ a mechanism suppressing otherwise-useful routed experts. The hypothesis is falsi
 implication: at this scale the routed experts are over-parametrized regardless of the shared
 expert — their under-use reflects a lack of *needed* specialized computation, not suppression.
 
+## Finding 8 — Shared dominance / routed redundancy is largely an undertraining artifact
+
+Training a proper baseline (`base1b`: 8 experts, 30k steps ≈ 983M tokens, final held-out
+ppl 2.98 vs the 49M-token pilots' ~90) and measuring branch importance vs tokens seen:
+
+| tokens | remove all 8 routed | remove shared | soft NMI | held-out PPL |
+|---|---|---|---|---|
+| 49M (pilots) | +0.55 | +4.0 | 0.0072 | ~4.5 |
+| 197M | +1.53 | +2.38 | 0.0172 | 3.58 |
+| 983M | **+2.65** | **+2.60** | 0.0207 | 2.98 |
+
+At 1B tokens the shared and routed branches are **balanced** (+2.60 vs +2.65), versus a ~7×
+shared advantage at 49M. **The "shared monopoly" and "routed redundancy" of Findings 1/6 are
+largely artifacts of undertraining that dissolve with adequate tokens**; specialization also
+grows ~3×. This is the most useful takeaway of the study: small-scale MoE interpretability that
+trains on too few tokens (as ours did initially, and as many pilot studies do) systematically
+overstates expert redundancy and shared-expert dominance.
+
+## Distillation (preliminary, single-seed)
+
+On-the-fly KD from a Mistral-7B teacher into the Tiny-MoE (α=0.9, τ=2.0), 98M tokens, compared
+against a batch/step-matched from-scratch CE control:
+
+| 98M-token model | soft NMI | PPL | remove routed | remove shared | ratio |
+|---|---|---|---|---|---|
+| CE control (batch 24) | 0.0063 | 3.92 | +1.03 | +3.85 | 3.7× |
+| distilled (batch 24) | 0.0095 | 4.09 | +1.74 | +4.40 | 2.5× |
+
+Against the matched control, distillation appears to **engage the routed branch more** (+1.03→
++1.74) and reduce the shared/routed imbalance (3.7×→2.5×), with slightly more domain NMI — but
+at a small next-token PPL cost (α=0.9 optimizes teacher-matching, not likelihood). **Single seed
+per condition; not statistically established.** We also found held-out NMI/PPL are sensitive to
+batch size at fixed tokens (CE batch-24 vs batch-64: NMI 0.0063 vs 0.0141), an uncontrolled
+confound in the earlier sweeps — see Limitations.
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
@@ -184,7 +219,12 @@ unconstrained (`aux=0`), domain-NMI is modest (0.034 = 3.4% of domain entropy): 
 specialization is present and significant but not dominant — consistent with prior reports that
 experts specialize more by token/syntax than topic. Conditional-NMI estimates are finite-sample
 biased and not relied upon. The held-out eval uses a skip-offset of the training streams rather
-than a fully disjoint split.
+than a fully disjoint split. **Batch-size confound:** held-out NMI and branch importance are
+sensitive to batch size at fixed token count (CE, 98M tokens: batch-24 NMI 0.0063 / remove-routed
++1.03 vs batch-64 NMI 0.0141 / +0.84); sweeps in this document used mixed batch sizes (32/64), so
+cross-experiment magnitude comparisons should be read with care — the within-experiment,
+matched-batch comparisons and the tokens-vs-importance trajectory (Finding 8) are the reliable
+ones. Distillation results are single-seed and not statistically established.
 
 ## Framing
 
