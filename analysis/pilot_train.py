@@ -58,6 +58,8 @@ def main():
     ap.add_argument("--no-shared", action="store_true", help="D1 variant: no shared expert")
     ap.add_argument("--shared-dropout", type=float, default=0.0,
                     help="per-token dropout of the shared branch during training")
+    ap.add_argument("--shared-lr-mult", type=float, default=1.0,
+                    help="LR multiplier on the shared-expert params (gradient-race test)")
     ap.add_argument("--aux-coef", type=float, default=1e-2)
     ap.add_argument("--z-coef", type=float, default=1e-3)
     ap.add_argument("--save-every", type=int, default=500)
@@ -90,7 +92,21 @@ def main():
         dl_kwargs.update(prefetch_factor=2, persistent_workers=True)
     dl = DataLoader(ds, **dl_kwargs)
 
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95), weight_decay=0.1)
+    # Optionally slow the shared expert's learning (gradient-race mechanism test):
+    # its params get lr * shared_lr_mult, everything else the base lr.
+    if args.shared_lr_mult != 1.0 and config.use_shared_expert:
+        shared_ids = {id(p) for n, p in model.named_parameters()
+                      if "shared_w13" in n or "shared_w2" in n}
+        shared = [p for p in model.parameters() if id(p) in shared_ids]
+        rest = [p for p in model.parameters() if id(p) not in shared_ids]
+        opt = torch.optim.AdamW(
+            [{"params": rest, "lr": args.lr, "mult": 1.0},
+             {"params": shared, "lr": args.lr * args.shared_lr_mult, "mult": args.shared_lr_mult}],
+            betas=(0.9, 0.95), weight_decay=0.1)
+        print(f"[shared-lr] shared params get lr x{args.shared_lr_mult}", flush=True)
+    else:
+        opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95), weight_decay=0.1)
+        opt.param_groups[0]["mult"] = 1.0
 
     it = iter(dl)
     t0 = time.perf_counter()
@@ -115,8 +131,9 @@ def main():
             (loss / args.grad_accum).backward()
             agg += loss.item() / args.grad_accum
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        base_lr = cosine_lr(step, args.lr, args.warmup, args.steps)
         for g in opt.param_groups:
-            g["lr"] = cosine_lr(step, args.lr, args.warmup, args.steps)
+            g["lr"] = base_lr * g.get("mult", 1.0)
         opt.step()
         step += 1
         if step % args.log_every == 0:
