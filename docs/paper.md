@@ -122,6 +122,12 @@ importance at each checkpoint (mean ± std):
 | 491M | 3.20 | +1.99 ± 0.16 | +2.25 ± 0.01 | 0.47 |
 | 983M | 3.00 | +2.45 ± 0.18 | +2.48 ± 0.11 | 0.50 |
 
+![Branch importance vs training tokens](figures/fig1_trajectory.png)
+
+*Figure 1: Ablation impact (ΔPPL) of removing the shared expert vs. all 8 routed experts, over a
+4-seed constant-batch training trajectory (bands = ±1 std). The shared expert dominates early;
+the branches cross to balance by ~295M tokens.*
+
 ("Shared share" = remove-shared ΔPPL / (remove-shared + remove-routed).) At 98M tokens — the
 regime of many pilot studies and of our own early experiments — the shared expert carries 81% of
 the ablation impact and the routed experts look nearly redundant. The crossover to balance
@@ -161,6 +167,12 @@ tokens):
 | ×0.3 | +1.94 | +2.48 | 0.56 | 4.10 |
 | ×0.1 | **+4.46** | +0.72 | **0.14** | 4.10 |
 
+![Shared-LR shifts the crossover](figures/fig2_mechanism.png)
+
+*Figure 2: The shared branch's share of ablation impact vs. tokens, for three shared-expert
+learning-rate multipliers (2 seeds). Slowing the shared expert (×0.3, ×0.1) shifts the
+routed-activation crossover earlier, dose-dependently — at unchanged perplexity.*
+
 Slowing the shared expert makes the routed branch load-bearing **dramatically earlier** — a 5×
 increase in routed importance at a *fixed* token budget — shifting the crossover from ~295M
 tokens (baseline) to <100M (×0.3) to before training even settles (×0.1, where routed dominate
@@ -187,6 +199,12 @@ hold**. The minimum shared share reached during training:
 | 16 | 0.53 | no | 2.94 |
 | 32 | 0.55 | no | 2.90 |
 
+![Non-monotonic #experts dependence](figures/fig3_experts.png)
+
+*Figure 3: (left) minimum shared share reached during training vs. number of routed experts —
+only E=8 crosses to balance; (right) more experts monotonically improve perplexity. Engagement
+and perplexity are optimized at different granularities.*
+
 The dependence is **non-monotonic**, with a "Goldilocks" optimum at E=8: only there do the
 routed experts fully reach balance. The mechanism explains the high-E side (E=8→16→32: as each
 routed expert's gradient share k/E shrinks, the shared expert grows more dominant) but fails at
@@ -210,6 +228,11 @@ experts organize more by token/surface than by topic.
 {0, 1e-2, 1e-1} moves domain NMI monotonically (0.034 / 0.0085 / 0.0010; all pairwise
 permutation tests significant) and load imbalance in lockstep, at no perplexity cost — the
 balance↔specialization tension is set by one coefficient.
+
+![Load balancing controls specialization](figures/fig4_auxloss.png)
+
+*Figure 4: Domain specialization (left) and expert load imbalance (right) vs. the auxiliary
+load-balancing coefficient (4 seeds, ±1 std). Both fall monotonically as balancing strengthens.*
 
 **Shared expert enables specialization.** With balancing off, routed domain-NMI is higher *with*
 the shared expert (0.034) than without (0.015, p=0.029): the shared expert acts as a
