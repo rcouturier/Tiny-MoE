@@ -250,6 +250,31 @@ small MoE actually uses its experts — useful for interpretability, expert prun
 Together, Findings 8+9 give observation → mechanism → control: routed "redundancy" is a
 gradient-race artifact with a known threshold and a causal lever.
 
+## Finding 10 — #experts dependence is non-monotonic (the clean ∝E/k law is refuted)
+
+The gradient-race mechanism (Finding 9) predicts the crossover token-count should scale ∝ E/k
+(each routed expert sees k/E of the gradient). We tested E ∈ {4,8,16,32} (top-2, batch 64,
+full trajectories). The minimum shared "share" of ablation impact reached during training:
+
+| #experts | min shared share | crosses 0.5? | final PPL |
+|---|---|---|---|
+| 4 | 0.56 | no (plateau) | 3.28 |
+| **8** | **0.48** | **yes** | 3.00 |
+| 16 | 0.53 | no | 2.94 |
+| 32 | 0.55 | no | 2.90 |
+
+The simple law **does not hold**: only E=8 fully crosses to routed-balance; the relationship is
+**non-monotonic** with a "Goldilocks" optimum at E=8. The mechanism's prediction holds on the
+high-E side (E=8→16→32: shared grows more dominant, 0.48→0.53→0.55, as each routed expert's
+gradient share k/E shrinks) but **fails at E=4**, which stays shared-dominant despite the highest
+per-expert gradient share — implicating a second factor, total routed capacity (E=4 has half
+E=8's routed params). There is also a practical tension: more experts give **better perplexity**
+(2.90 at E=32) but **more shared-dominated computation** (routed experts individually
+under-used). (Caveat: E=4 trained to 491M vs 983M for others, but plateaued flat by 295M.)
+
+Net: the #experts dependence is a nuanced secondary result, not a clean law. The core
+contribution remains Findings 8 (observation) + 9 (mechanism + control).
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
