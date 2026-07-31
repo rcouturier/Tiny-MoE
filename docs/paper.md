@@ -79,12 +79,35 @@ see ~1B tokens (~3.4h each).
 
 ## 3. Related work
 
-Prior interpretability work (e.g. on Mixtral) reports that experts specialize more by token /
-surface form than by topic; DeepSeekMoE motivates the shared expert as a way to free routed
-experts to specialize; and the tension between load balancing and specialization underlies
-auxiliary-loss-free routing. We reproduce these qualitative phenomena in a controlled labelled
-setting (Section 7) but our central claim — that small-MoE routed redundancy is an undertraining
-artifact caused by a gradient-exposure race, and is controllable — is, to our knowledge, new.
+**Sparse MoE layers.** Conditional computation via a sparsely-gated MoE layer was introduced by
+Shazeer et al. [2017] and scaled by GShard [Lepikhin et al., 2021] and Switch Transformer
+[Fedus et al., 2022], which also established the auxiliary load-balancing loss. ST-MoE [Zoph et
+al., 2022] added the router z-loss for stability. Our model uses both, in a top-2 configuration
+[Jiang et al., 2024].
+
+**Shared experts.** DeepSeekMoE [Dai et al., 2024] introduced the always-on shared expert
+alongside fine-grained routed experts, arguing it absorbs common knowledge and thereby *frees*
+the routed experts to specialize; the design carries through DeepSeek-V2/V3 [DeepSeek-AI, 2024a,b],
+which also motivate auxiliary-loss-free routing by the balance–specialization tension. We
+reproduce the "shared enables specialization" effect (Section 7) but show it is only visible once
+balancing is off, and — more importantly — that at small scale the shared expert *dominates* the
+computation for a mechanistic reason unrelated to specialization.
+
+**Expert specialization studies.** Analyses of Mixtral [Jiang et al., 2024] report that experts
+specialize more by token/syntactic identity than by topic; OLMoE [Muennighoff et al., 2024]
+studies specialization and routing saturation across training in open MoEs. We add a controlled,
+domain-labelled probe with causal branch ablation and, crucially, identify a training-dynamics
+cause for the small-scale "routed redundancy" that these observational studies do not address.
+
+**Architecture components.** Our backbone uses MLA [DeepSeek-AI, 2024a], RoPE [Su et al., 2021],
+RMSNorm [Zhang and Sennrich, 2019], and optional YaRN context extension [Peng et al., 2023];
+the distillation experiment follows Hinton et al. [2015] with a Mistral-7B teacher [Jiang et al.,
+2023]. Pre-training data are FineWeb-Edu [Penedo et al., 2024], Cosmopedia-v2 [Ben Allal et al.,
+2024], and OpenWebMath [Paster et al., 2023].
+
+To our knowledge, the central claim — that small-MoE routed redundancy is an *undertraining
+artifact* caused by a *gradient-exposure race* between the shared and routed experts, and is
+*causally controllable* by the shared-expert learning rate at no quality cost — is new.
 
 ## 4. Routed "redundancy" is an undertraining artifact
 
@@ -113,6 +136,20 @@ Why does the shared expert dominate early? It is updated on **every** token; eac
 is updated on only a `k/E` = 2/8 = 25% fraction. The shared expert therefore wins the early
 optimization race and the residual stream comes to rely on it; the routed experts become
 load-bearing only once the shared expert saturates.
+
+**Formalization.** Consider one MoE block whose output on token *t* is
+`y_t = s(x_t) + Σ_{e∈topk(t)} g_{t,e} f_e(x_t)`, where `s` is the shared expert and `f_e` the
+routed experts. Over a batch of *N* tokens, the shared parameters receive a gradient signal
+aggregated over all *N* tokens, whereas a routed expert *e* receives gradient only from the
+`≈ N·k/E` tokens routed to it. Under a shared learning rate, the shared expert thus accumulates
+roughly `E/k×` more effective updates per parameter early in training, when the loss gradient is
+large and the allocation of "who computes what" is still plastic. The residual pathway
+greedily routes common computation to whichever sub-module reduces loss fastest — the shared
+expert — which further starves the routed experts of useful gradient (a rich-get-richer
+dynamic). This yields two testable predictions: (i) reducing the shared expert's learning rate
+should let the routed experts capture computation earlier (tested below, confirmed); and (ii) the
+crossover token count should grow with `E/k` (tested in Section 6, only partially confirmed —
+total routed capacity also matters).
 
 We test this causally by placing the shared-expert parameters in their own optimizer group at
 `lr × mult` and leaving everything else at the base learning rate (2 seeds, values at 98M
@@ -200,7 +237,25 @@ batches; the within-experiment, matched-batch comparisons and the token trajecto
 reliable ones. Distillation results are single-seed. Whether the ~300M-token crossover and the
 gradient-race control persist at larger scale is untested.
 
-## 9. Conclusion
+## 9. Practical recommendations
+
+For practitioners training or studying small shared-expert MoEs:
+
+1. **Do not diagnose expert redundancy on an undertrained model.** Below a few hundred million
+   tokens the shared expert dominates for optimization reasons, not architectural ones; measure
+   branch importance as a trajectory, not at a single early checkpoint.
+2. **To engage the routed experts sooner, slow the shared expert** (a modest LR multiplier,
+   e.g. ×0.3). This reallocates computation to the routed branch at no measured perplexity cost —
+   valuable when routed experts are the object of study (interpretability, expert pruning,
+   modular editing) or when a balanced load is desired for systems reasons.
+3. **Pick the number of experts for engagement, not just perplexity.** More experts monotonically
+   improved perplexity here but left the routed experts individually more under-used; engagement
+   was maximized at an intermediate count (E=8 in our setup).
+4. **Report seeds and use matched batch sizes.** Both the sign of a specialization effect (our
+   retraction (a)) and the magnitude of branch-importance metrics were sensitive to seed and
+   batch size at fixed tokens.
+
+## 10. Conclusion
 
 In small shared-expert MoEs, the routed experts are not redundant — they are out-competed by the
 shared expert in a gradient-exposure race that resolves with training and that a single learning
@@ -210,7 +265,7 @@ the shared expert. The methodology — a cheap, controllable, domain-labelled te
 branch ablation, seed replication, and the willingness to retract — is offered alongside the
 findings.
 
-## Reproducibility
+## 11. Reproducibility
 
 All code, configs, and the analysis toolkit (branch ablation, routing capture, NMI /
 conditional-MI, permutation tests, the trajectory and mechanism drivers) are in the repository;
