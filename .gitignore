@@ -32,4 +32,8 @@ datasets/
 *.log
 
 # OS files
-.DS_Store
+.DS_Storedocs/*.aux
+docs/*.bbl
+docs/*.blg
+docs/*.log
+docs/*.out
