@@ -36,7 +36,9 @@ optimization race; and (iii) the race is \textbf{causally controllable}: slowing
 expert's learning rate shifts the routed-activation crossover dose-dependently (the shared
 branch's share of ablation impact at 98M tokens drops from 0.80 to 0.14) \textbf{at no perplexity
 cost}. A single hyperparameter thus reallocates computation to the routed experts without changing
-model quality. We further report the axes of specialization (surface form $>$ domain $>$ frequency,
+model quality. The control \textbf{reproduces at $2\times$ depth}, though within our token budget the
+crossover to routed balance completes only at the smallest configuration. We further report the
+axes of specialization (surface form $>$ domain $>$ frequency,
 position irrelevant) and a non-monotonic dependence on the number of experts. Two of our own early
 conclusions were overturned by seed replication and are reported as such.
 \end{abstract}
@@ -227,6 +229,28 @@ merely immature. Crucially, \textbf{held-out perplexity is unchanged} across con
 expert is therefore not \emph{necessary} for this computation; the model defaults to placing it
 there because that expert trains fastest. A single knob reallocates computation to the routed
 experts at no quality cost.
+
+\paragraph{Does the mechanism hold at scale?} We repeat the shared-LR sweep on a $2\times$-deeper
+model (16 layers, 251M parameters, 1 seed; Figure~\ref{fig:scale}). The control reproduces almost
+exactly: at 98M tokens the shared share drops $0.82\rightarrow0.64\rightarrow0.21$ for
+$\times1.0/\times0.3/\times0.1$ (vs.\ $0.80/0.56/0.14$ at 134M), dose-dependent and at unchanged
+perplexity---the gradient-race mechanism and its knob are robust to depth. The crossover
+\emph{timing}, however, is scale-dependent: the deeper baseline only reaches a minimum share of
+$0.54$ ($\sim$491M tokens) and does \textbf{not} cross to balance within 1B tokens, the shared
+expert re-asserting dominance ($0.59$ at 983M)---the same dip-then-rise seen for larger $E$
+(Section~\ref{sec:scope}). Deeper models stay shared-dominated for many more tokens; ``enough
+tokens'' for routed balance grows with model size (mechanistically consistent). This strengthens
+the practical warning but means we observe the crossover \emph{complete} only at our smallest
+configuration within our 1B-token budget.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{fig5_scale.pdf}
+\caption{(left) shared branch's share vs.\ tokens at two depths---the 8-layer model crosses to
+balance, the 16-layer model approaches but does not within 1B tokens; (right) the shared-LR
+control reproduces at $2\times$ depth, dropping the share dose-dependently at both scales.}
+\label{fig:scale}
+\end{figure}
 
 \section{Scope: the \#experts dependence is non-monotonic}\label{sec:scope}
 

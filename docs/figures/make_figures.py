@@ -124,4 +124,35 @@ a2.set_ylabel("expert load imbalance")
 a2.set_title("Load balance")
 save(fig, "fig4_auxloss")
 
+# ---------- Fig 5: scale robustness (8L vs 16L) ----------
+tok_s = np.array([98, 197, 295, 393, 491, 590, 688, 786, 885, 983])
+share_8L = np.array([0.81, 0.60, 0.50, 0.47, 0.47, 0.48, 0.48, 0.49, 0.50, 0.50])
+share_16L = np.array([0.84, 0.65, 0.58, 0.55, 0.54, 0.56, 0.56, 0.58, 0.59, 0.59])
+lr_labels = ["x1.0", "x0.3", "x0.1"]
+share98_8L = [0.80, 0.56, 0.14]
+share98_16L = [0.82, 0.64, 0.21]
+
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.4, 3.2))
+style(a1); style(a2)
+# panel (a): F8 crossover, scale dependence
+a1.axhline(0.5, color=MUTED, ls=":", lw=1)
+a1.plot(tok_s, share_8L, color=BLUE, lw=2, marker="o", ms=5, zorder=3, label="8 layers (134M)")
+a1.plot(tok_s, share_16L, color=ORANGE, lw=2, marker="s", ms=5, zorder=3, label="16 layers (251M)")
+a1.set_xlabel("training tokens (millions)")
+a1.set_ylabel("shared branch share")
+a1.set_title("Crossover is scale-dependent")
+a1.set_ylim(0.4, 0.9)
+a1.legend(loc="upper right", frameon=False, fontsize=9)
+# panel (b): F9 mechanism reproduces at scale
+x = np.arange(3); w = 0.38
+a2.bar(x - w/2, share98_8L, w, color=BLUE, zorder=3, label="8 layers")
+a2.bar(x + w/2, share98_16L, w, color=ORANGE, zorder=3, label="16 layers")
+a2.set_xticks(x); a2.set_xticklabels(lr_labels)
+a2.set_xlabel("shared-expert LR multiplier")
+a2.set_ylabel("shared share at 98M tokens")
+a2.set_title("Mechanism reproduces at 2x depth")
+a2.set_ylim(0, 0.95)
+a2.legend(loc="upper right", frameon=False, fontsize=9)
+save(fig, "fig5_scale")
+
 print("all figures written to", HERE)
