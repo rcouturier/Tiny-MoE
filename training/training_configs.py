@@ -81,6 +81,7 @@ class ModelConfig:
     capacity_factor: float = 1.25
     use_shared_expert: bool = True
     shared_dropout: float = 0.0   # per-token dropout of the shared branch during training
+    shared_intermediate_size: int = 0   # shared-expert width; 0 => same as moe_intermediate_size
 
 
 class TrainConfig:

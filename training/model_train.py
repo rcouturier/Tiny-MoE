@@ -337,9 +337,10 @@ class MoE(nn.Module):
         self.w2 = nn.Parameter(
             torch.empty(self.num_experts,self.intermediate_size, self.hidden_size,)
         )
+        self.shared_intermediate = getattr(config, "shared_intermediate_size", 0) or self.intermediate_size
         if self.use_shared_expert:
-            self.shared_w13 = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=False)
-            self.shared_w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+            self.shared_w13 = nn.Linear(self.hidden_size, 2 * self.shared_intermediate, bias=False)
+            self.shared_w2 = nn.Linear(self.shared_intermediate, self.hidden_size, bias=False)
         self.reset_parameters()
 
     def reset_parameters(self):

@@ -51,7 +51,9 @@ def main():
     ap.add_argument("--num-experts", type=int, default=8)
     ap.add_argument("--top-k", type=int, default=2)
     ap.add_argument("--moe-intermediate", type=int, default=1024,
-                    help="per-expert intermediate size (raise to match total routed capacity)")
+                    help="per-routed-expert intermediate size (raise to match total routed capacity)")
+    ap.add_argument("--shared-intermediate", type=int, default=0,
+                    help="shared-expert intermediate size; 0 => same as --moe-intermediate")
     ap.add_argument("--seq-len", type=int, default=512)
     ap.add_argument("--batch", type=int, default=24)
     ap.add_argument("--grad-accum", type=int, default=1)
@@ -83,6 +85,7 @@ def main():
 
     config = ModelConfig(num_layers=args.num_layers, num_experts=args.num_experts,
                          num_experts_per_token=args.top_k, moe_intermediate_size=args.moe_intermediate,
+                         shared_intermediate_size=args.shared_intermediate,
                          max_seq_len=args.seq_len, use_shared_expert=not args.no_shared,
                          shared_dropout=args.shared_dropout)
     model = Transformer(config).to(device)
