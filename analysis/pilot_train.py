@@ -50,6 +50,8 @@ def main():
     ap.add_argument("--num-layers", type=int, default=8)
     ap.add_argument("--num-experts", type=int, default=8)
     ap.add_argument("--top-k", type=int, default=2)
+    ap.add_argument("--moe-intermediate", type=int, default=1024,
+                    help="per-expert intermediate size (raise to match total routed capacity)")
     ap.add_argument("--seq-len", type=int, default=512)
     ap.add_argument("--batch", type=int, default=24)
     ap.add_argument("--grad-accum", type=int, default=1)
@@ -60,6 +62,8 @@ def main():
                     help="per-token dropout of the shared branch during training")
     ap.add_argument("--shared-lr-mult", type=float, default=1.0,
                     help="LR multiplier on the shared-expert params (gradient-race test)")
+    ap.add_argument("--shared-ramp-end", type=int, default=0,
+                    help="if >0, ramp the shared-expert LR mult from --shared-lr-mult to 1.0 by this step")
     ap.add_argument("--aux-coef", type=float, default=1e-2)
     ap.add_argument("--z-coef", type=float, default=1e-3)
     ap.add_argument("--save-every", type=int, default=500)
@@ -78,8 +82,9 @@ def main():
         tok.pad_token = tok.eos_token
 
     config = ModelConfig(num_layers=args.num_layers, num_experts=args.num_experts,
-                         num_experts_per_token=args.top_k, max_seq_len=args.seq_len,
-                         use_shared_expert=not args.no_shared, shared_dropout=args.shared_dropout)
+                         num_experts_per_token=args.top_k, moe_intermediate_size=args.moe_intermediate,
+                         max_seq_len=args.seq_len, use_shared_expert=not args.no_shared,
+                         shared_dropout=args.shared_dropout)
     model = Transformer(config).to(device)
     model.train()
     n_params = sum(p.numel() for p in model.parameters())
@@ -92,18 +97,18 @@ def main():
         dl_kwargs.update(prefetch_factor=2, persistent_workers=True)
     dl = DataLoader(ds, **dl_kwargs)
 
-    # Optionally slow the shared expert's learning (gradient-race mechanism test):
-    # its params get lr * shared_lr_mult, everything else the base lr.
-    if args.shared_lr_mult != 1.0 and config.use_shared_expert:
+    # Optionally slow the shared expert's learning (gradient-race mechanism test),
+    # statically (--shared-lr-mult) or on a ramp to 1.0 (--shared-ramp-end).
+    if (args.shared_lr_mult != 1.0 or args.shared_ramp_end > 0) and config.use_shared_expert:
         shared_ids = {id(p) for n, p in model.named_parameters()
                       if "shared_w13" in n or "shared_w2" in n}
         shared = [p for p in model.parameters() if id(p) in shared_ids]
         rest = [p for p in model.parameters() if id(p) not in shared_ids]
         opt = torch.optim.AdamW(
-            [{"params": rest, "lr": args.lr, "mult": 1.0},
-             {"params": shared, "lr": args.lr * args.shared_lr_mult, "mult": args.shared_lr_mult}],
+            [{"params": rest, "lr": args.lr},
+             {"params": shared, "lr": args.lr * args.shared_lr_mult, "shared": True}],
             betas=(0.9, 0.95), weight_decay=0.1)
-        print(f"[shared-lr] shared params get lr x{args.shared_lr_mult}", flush=True)
+        print(f"[shared-lr] mult={args.shared_lr_mult} ramp_end={args.shared_ramp_end}", flush=True)
     else:
         opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95), weight_decay=0.1)
         opt.param_groups[0]["mult"] = 1.0
@@ -133,7 +138,14 @@ def main():
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         base_lr = cosine_lr(step, args.lr, args.warmup, args.steps)
         for g in opt.param_groups:
-            g["lr"] = base_lr * g.get("mult", 1.0)
+            if g.get("shared"):
+                if args.shared_ramp_end > 0:
+                    m = args.shared_lr_mult + (1.0 - args.shared_lr_mult) * min(1.0, step / args.shared_ramp_end)
+                else:
+                    m = args.shared_lr_mult
+            else:
+                m = 1.0
+            g["lr"] = base_lr * m
         opt.step()
         step += 1
         if step % args.log_every == 0:
