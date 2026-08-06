@@ -32,7 +32,10 @@ datasets/
 *.log
 
 # OS files
-.DS_Storedocs/*.aux
+.DS_Store
+
+# LaTeX build artifacts
+docs/*.aux
 docs/*.bbl
 docs/*.blg
 docs/*.log

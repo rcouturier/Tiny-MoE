@@ -250,7 +250,16 @@ small MoE actually uses its experts — useful for interpretability, expert prun
 Together, Findings 8+9 give observation → mechanism → control: routed "redundancy" is a
 gradient-race artifact with a known threshold and a causal lever.
 
-## Finding 10 — #experts dependence is non-monotonic (the clean ∝E/k law is refuted)
+## Finding 10 — #experts dependence is non-monotonic (RETRACTED, see Finding 11)
+
+> **Retracted 2026-08-06.** Both halves of this finding were confounded. The sweep held
+> per-expert width fixed, so total routed capacity and total parameter count grew with E while
+> the branch **width ratio** stayed at 1.0 throughout — and Finding 11 shows the width ratio is
+> what governs the split. All four points below therefore sit inside the single ratio-1.0 band
+> (0.47–0.56), and the "Goldilocks optimum at E=8" is within that band's residual spread. The
+> perplexity gain with E was a parameter-count effect: at matched parameters perplexity is flat
+> (2.99 / 3.00 / 3.00 / 3.02 for E = 4/8/16/32). Expert count is not what sets the split.
+> The original text is kept below for the record.
 
 The gradient-race mechanism (Finding 9) predicts the crossover token-count should scale ∝ E/k
 (each routed expert sees k/E of the gradient). We tested E ∈ {4,8,16,32} (top-2, batch 64,
@@ -275,6 +284,83 @@ under-used). (Caveat: E=4 trained to 491M vs 983M for others, but plateaued flat
 Net: the #experts dependence is a nuanced secondary result, not a clean law. The core
 contribution remains Findings 8 (observation) + 9 (mechanism + control).
 
+## Finding 11 — The branch split is set by the routed:shared width ratio, not by #experts
+
+If not E (Finding 10, retracted), what determines *where* the shared/routed split lands? Eleven
+8-layer configurations, top-2, 983M tokens, 1–2 seeds each. Write `I` for each routed expert's
+intermediate width and `I_shared` for the shared expert's. **Two contrasts disentangle the
+candidates, both at fixed E=8, k=2** (so expert count, routing and per-expert gradient share are
+constant):
+
+**Varying routed width** (`I_shared` = 1024 throughout):
+
+| `I` | 256 | 1024 | 2048 |
+|---|---|---|---|
+| min shared share | 0.79 | 0.47 | 0.37 |
+| params | 58.2M | 133.7M | 234.4M |
+
+**Varying shared width** (`I` = 1024 throughout — the routed branch is byte-for-byte identical,
+same active capacity k·I = 2048):
+
+| `I_shared` | 512 | 1024 | 4096 |
+|---|---|---|---|
+| min shared share | **0.28** | 0.47 | **0.81** |
+| params | 127.4M | 133.7M | 171.5M |
+
+**The second contrast is decisive**: nothing about the routed branch changes and the split still
+moves by 0.53. **Absolute routed capacity does not govern the split.** What both contrasts share
+is the ratio `I / I_shared`. Grouping every configuration measured by that ratio — including the
+four points of the retracted E-sweep, all of which sat at ratio 1.0 — gives non-overlapping bands:
+
+| ratio `I`/`I_shared` | 0.25 | 0.5 | 1.0 | 2.0 |
+|---|---|---|---|---|
+| min shared share | 0.72 / 0.79 / 0.81 | 0.63 | 0.47 / 0.53 / 0.55 / 0.56 | 0.25 / 0.28 / 0.37 |
+
+The ordering holds across **8× in ratio, 8× in expert count (E ∈ {4,…,32}) and 4× in parameter
+count (58M–234M)**. Within a band the residual spread is ~0.1 and is *not* consistently explained
+by E: at ratio 2.0 more experts *raise* the share (E=4 → 0.25 vs E=8 → 0.37), at ratio 0.25 more
+experts *lower* it (E=32 → 0.72 vs E=8 → 0.79). Seed noise on this quantity is ~0.02 (measured by
+adding seed 1 to `e8i256` / `e8i2048`), an order of magnitude below the effect.
+
+At matched total routed capacity (E·I = 8192, equal parameters), E moves neither the split much
+nor perplexity at all: final PPL 2.99 / 3.00 / 3.00 / 3.02 for E = 4/8/16/32.
+
+**And it is nearly free.** Across the seven 127M–234M configurations the minimum shared share
+spans 0.25 → 0.81 while final PPL spans only 2.95 → 3.02. Combined with Finding 9: the gradient
+race decides *who gets there first*, the width ratio decides *how much each branch can absorb* —
+and where a small MoE puts its feed-forward computation is close to a free design choice.
+
+Full per-checkpoint tables, provenance and reproduction commands: `docs/branch-split-runs.md`.
+
+## Finding 12 — A temporary shared-LR handicap permanently reallocates computation (hysteresis)
+
+Finding 9's knob was applied for all of training. If the split is decided by an *early* race, a
+handicap covering only that race should suffice. Test on the 16-layer model (251M params,
+1 seed): ramp the shared-expert LR multiplier from ×0.1 up to ×1.0 by step 9000 (~295M tokens),
+after which every parameter trains at the base rate.
+
+| tokens | baseline ×1.0 | static ×0.1 | ramp 0.1→1.0 |
+|---|---|---|---|
+| 98M | 0.84 | 0.21 | 0.42 |
+| 295M (ramp ends) | 0.58 | 0.14 | 0.15 |
+| 491M | 0.54 | 0.16 | 0.16 |
+| 983M | 0.59 | — | **0.21** |
+| final PPL | 2.90 | — | 2.89 |
+
+**The reallocation does not undo.** By the end of the ramp the ramped run has converged onto the
+static-×0.1 trajectory, and once the handicap is gone it stays there — 0.21 at 983M vs the
+baseline's 0.59, at equal perplexity. The shared branch does slowly re-assert (0.14 → 0.21 between
+295M and 983M), far more slowly than the baseline's rise. This is what a race-then-commit dynamic
+predicts, and it makes the knob a *training-schedule* intervention rather than a permanent tax on
+the shared expert.
+
+It also removes Finding 8's / the paper's caveat that the 16-layer model cannot be brought to
+routed balance within 1B tokens: left alone it cannot, but it can be driven well past balance and
+kept there.
+
+**Caveat: single seed, single ramp endpoint, single depth.** A dose–response over the ramp
+endpoint is the obvious next control; this establishes existence, not a law.
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
@@ -287,7 +373,12 @@ sensitive to batch size at fixed token count (CE, 98M tokens: batch-24 NMI 0.006
 +1.03 vs batch-64 NMI 0.0141 / +0.84); sweeps in this document used mixed batch sizes (32/64), so
 cross-experiment magnitude comparisons should be read with care — the within-experiment,
 matched-batch comparisons and the tokens-vs-importance trajectory (Finding 8) are the reliable
-ones. Distillation results are single-seed and not statistically established.
+ones. Distillation results are single-seed and not statistically established. **Finding 11**
+characterizes an *ordering* over the width ratio at a single depth and token budget, not a
+functional form — whether the split depends on the ratio alone or on ratio and depth jointly is
+untested. **Finding 12** is single-seed at one ramp endpoint and one depth. **Confounding:** our
+own retraction of Finding 10 came from letting total capacity ride along with the swept variable;
+architecture sweeps here now match capacity or parameters explicitly.
 
 ## Framing
 
@@ -304,9 +395,13 @@ MoE:
 4. **Shared and routed experts are complements, not substitutes** — the shared expert provides
    a common-capability backstop that *enables* routed experts to specialize; removing it
    *reduces* specialization once balancing is off.
+5. **The split is a design choice, not a property of the architecture** — its *timing* is set by
+   the gradient race (and a temporary LR handicap moves it permanently), its *level* by the
+   routed:shared width ratio; across 0.25→0.81 of shared share, perplexity moves by <0.1.
 
 The methodological contribution is the pairing of a domain-labelled probe with causal branch
-ablation, a load-balancing sweep, and strict seed replication — which, notably, overturned two
-of our own early conclusions (the "no-shared sharpens" separation and the "substitutes"
-framing). Both were small-sample or under-controlled artifacts that replication and the
-`aux=0` interaction corrected.
+ablation, a load-balancing sweep, and strict seed replication — which, notably, overturned three
+of our own conclusions (the "no-shared sharpens" separation, the "substitutes" framing, and the
+non-monotonic #experts law). The first two were small-sample or under-controlled artifacts that
+replication and the `aux=0` interaction corrected; the third was a capacity confound that only a
+width-matched sweep exposed.

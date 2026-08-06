@@ -76,31 +76,53 @@ ax.set_ylim(0, 0.9)
 save(fig, "fig2_mechanism")
 
 
-# ---------- Fig 3: Finding 10 — non-monotonic #experts ----------
-E = [4, 8, 16, 32]
-minshare = [0.56, 0.48, 0.53, 0.55]
-ppl = [3.28, 3.00, 2.94, 2.90]
-xpos = np.arange(len(E))
-fig, (a1, a2) = plt.subplots(1, 2, figsize=(6.6, 3.1))
-for ax in (a1, a2):
-    style(ax)
-    ax.set_xticks(xpos)
-    ax.set_xticklabels(E)
-    ax.set_xlabel("number of routed experts")
-bars = a1.bar(xpos, minshare, color=[GREEN if v < 0.5 else BLUE for v in minshare], width=0.6, zorder=3)
-a1.axhline(0.5, color=MUTED, ls=":", lw=1)
-for x, v in zip(xpos, minshare):
-    a1.annotate(f"{v:.2f}", (x, v), xytext=(0, 3), textcoords="offset points", ha="center", fontsize=9)
+# ---------- Fig 3: the branch width ratio sets the split ----------
+# (ratio I/I_shared, minimum shared share, E) for every configuration measured.
+RUNS = [(2.0, 0.25, 4), (2.0, 0.28, 8), (2.0, 0.37, 8),
+        (1.0, 0.47, 8), (1.0, 0.53, 16), (1.0, 0.55, 32), (1.0, 0.56, 4),
+        (0.5, 0.63, 16),
+        (0.25, 0.72, 32), (0.25, 0.79, 8), (0.25, 0.81, 8)]
+E_COLOR = {4: ORANGE, 8: BLUE, 16: GREEN, 32: VERM}
+
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.4, 3.2))
+style(a1)
+style(a2)
+
+# panel (a): every run, ordered by the width ratio; bands per ratio level do not overlap
+for r in sorted({r for r, _, _ in RUNS}):
+    vals = [s for rr, s, _ in RUNS if rr == r]
+    a1.plot([r, r], [min(vals), max(vals)], color=GRID, lw=6, solid_capstyle="round", zorder=1)
+for e in (4, 8, 16, 32):
+    pts = [(r, s) for r, s, ee in RUNS if ee == e]
+    a1.scatter([p[0] for p in pts], [p[1] for p in pts], s=42, color=E_COLOR[e],
+               zorder=3, label=f"E={e}", edgecolor="white", linewidth=0.7)
+a1.axhline(0.5, color=MUTED, ls=":", lw=1, zorder=2)
+a1.annotate("balanced (0.5)", (0.235, 0.515), color=MUTED, fontsize=8)
+a1.set_xscale("log", base=2)
+a1.set_xticks([0.25, 0.5, 1.0, 2.0])
+a1.set_xticklabels(["0.25", "0.5", "1", "2"])
+a1.set_xlabel("branch width ratio  $I$ / $I_{shared}$")
 a1.set_ylabel("minimum shared share")
-a1.set_ylim(0, 0.65)
-a1.set_title("Only E=8 reaches balance")
-a2.bar(xpos, ppl, color=VERM, width=0.6, zorder=3)
-for x, v in zip(xpos, ppl):
-    a2.annotate(f"{v:.2f}", (x, v), xytext=(0, 3), textcoords="offset points", ha="center", fontsize=9)
-a2.set_ylabel("final perplexity")
-a2.set_ylim(2.7, 3.4)
-a2.set_title("More experts, lower PPL")
-save(fig, "fig3_experts")
+a1.set_title("The width ratio orders every run")
+a1.set_ylim(0.15, 0.9)
+a1.legend(loc="lower left", frameon=False, fontsize=8, ncol=2, handletextpad=0.2)
+
+# panel (b): the decisive contrast — routed branch byte-for-byte identical
+IS = ["512", "1024", "4096"]
+contrast = [0.28, 0.47, 0.81]
+xpos = np.arange(3)
+a2.bar(xpos, contrast, color=[GREEN if v < 0.5 else BLUE for v in contrast], width=0.6, zorder=3)
+a2.axhline(0.5, color=MUTED, ls=":", lw=1)
+for x, v in zip(xpos, contrast):
+    a2.annotate(f"{v:.2f}", (x, v), xytext=(0, 3), textcoords="offset points",
+                ha="center", fontsize=9)
+a2.set_xticks(xpos)
+a2.set_xticklabels(IS)
+a2.set_xlabel("shared expert width $I_{shared}$")
+a2.set_ylabel("minimum shared share")
+a2.set_title("Routed branch identical (E=8, $I$=1024)")
+a2.set_ylim(0, 0.95)
+save(fig, "fig3_ratio")
 
 
 # ---------- Fig 4: Finding 2 — load balancing controls specialization ----------
@@ -154,5 +176,34 @@ a2.set_title("Mechanism reproduces at 2x depth")
 a2.set_ylim(0, 0.95)
 a2.legend(loc="upper right", frameon=False, fontsize=9)
 save(fig, "fig5_scale")
+
+
+# ---------- Fig 6: hysteresis — a temporary handicap permanently reallocates ----------
+tok_h = np.array([98, 197, 295, 393, 491, 590, 688, 786, 885, 983])
+base_16 = np.array([0.84, 0.65, 0.58, 0.55, 0.54, 0.56, 0.56, 0.58, 0.59, 0.59])
+ramp_16 = np.array([0.42, 0.23, 0.15, 0.14, 0.16, 0.17, 0.19, 0.20, 0.21, 0.21])
+static_16 = np.array([0.21, 0.13, 0.14, 0.15, 0.16])  # run stopped at 491M
+
+fig, ax = plt.subplots(figsize=(5.6, 3.4))
+style(ax)
+ax.axhline(0.5, color=MUTED, ls=":", lw=1, zorder=1)
+ax.annotate("balanced (0.5)", (105, 0.515), color=MUTED, fontsize=8)
+ax.axvspan(60, 295, color=GRID, alpha=0.45, zorder=0, lw=0)
+ax.annotate("shared LR ramped\n$\\times$0.1 $\\rightarrow$ $\\times$1.0", (175, 0.86), color=MUTED,
+            fontsize=8, ha="center")
+ax.plot(tok_h, base_16, color=BLUE, lw=2, marker="o", ms=5, zorder=3)
+ax.plot(tok_h, ramp_16, color=VERM, lw=2, marker="D", ms=5, zorder=3)
+ax.plot(tok_h[:5], static_16, color=GREEN, lw=2, ls="--", marker="s", ms=5, zorder=3)
+for lab, c, x, y, off in [("baseline $\\times$1.0", BLUE, tok_h[-1], base_16[-1], (7, 0)),
+                          ("ramp 0.1$\\rightarrow$1.0", VERM, tok_h[-1], ramp_16[-1], (7, 0)),
+                          ("static $\\times$0.1", GREEN, tok_h[2], static_16[2], (-2, -16))]:
+    ax.annotate(lab, (x, y), xytext=off, textcoords="offset points",
+                color=c, va="center", fontsize=9, fontweight="bold")
+ax.set_xlabel("training tokens (millions)")
+ax.set_ylabel("shared branch share of ablation impact")
+ax.set_title("The reallocation does not undo (16 layers, 251M)")
+ax.set_xlim(60, 1180)
+ax.set_ylim(0.03, 0.95)
+save(fig, "fig6_hysteresis")
 
 print("all figures written to", HERE)

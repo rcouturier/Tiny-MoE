@@ -81,14 +81,50 @@ Token counts: `tokens = steps × batch × 512`. Batch 64 → step 3000 ≈ 98M, 
 Trajectories (shared share by tokens): ×0.3 → 0.56 (98M), 0.49 (197M), 0.50 (295M), 0.52 (491M);
 ×0.1 → 0.14 (98M), 0.10 (197M), 0.09 (295M), 0.10 (491M). PPL matches baseline throughout.
 
-### C.3 Finding 10 — #experts sweep (top-2, batch 64), minimum shared share and final PPL
+### C.3 Finding 10 — #experts sweep (top-2, batch 64) — **RETRACTED**
 
-| E | min shared share | reached at | crosses 0.5 | final PPL |
-|---|---|---|---|---|
-| 4 | 0.56 | ~295M | no | 3.28 |
-| 8 | 0.48 | ~390M | yes | 3.00 |
-| 16 | 0.53 | ~450M | no | 2.94 |
-| 32 | 0.55 | ~390M | no | 2.90 |
+Kept for the record. Per-expert width was held fixed, so total routed capacity and total parameter
+count grew with E while the branch width ratio stayed at 1.0 throughout — all four points are one
+ratio-1.0 band (see C.3b), and the PPL trend is a parameter-count effect.
+
+| E | min shared share | reached at | crosses 0.5 | final PPL | params |
+|---|---|---|---|---|---|
+| 4 | 0.56 | ~295M | no | 3.28 | 83.4M |
+| 8 | 0.48 | ~390M | yes | 3.00 | 133.7M |
+| 16 | 0.53 | ~450M | no | 2.94 | 234.4M |
+| 32 | 0.55 | ~390M | no | 2.90 | 435.8M |
+
+### C.3b Finding 11 — the branch width ratio sets the split (8 layers, top-2, 983M tokens)
+
+`I` = per-routed-expert intermediate width, `I_shared` = shared expert's. Minimum shared share
+reached over the trajectory; ± is the spread across seeds. Full per-checkpoint tables in
+[branch-split-runs.md](branch-split-runs.md).
+
+| run | E | I | I_shared | ratio | params | seeds | min share | @983M | final PPL |
+|---|---|---|---|---|---|---|---|---|---|
+| `e4wide` | 4 | 2048 | 1024 | 2.0 | 133.7M | 2 | 0.25 | 0.28 | 2.99 |
+| `sh512` | 8 | 1024 | 512 | 2.0 | 127.4M | 2 | 0.28 | 0.34 | 3.01 |
+| `e8i2048` | 8 | 2048 | 1024 | 2.0 | 234.4M | 2 | 0.37 | 0.40 | 2.95 |
+| `base1b` | 8 | 1024 | 1024 | 1.0 | 133.7M | 4 | 0.47 | 0.50 | 3.00 |
+| `e16cap` | 16 | 512 | 1024 | 0.5 | 133.7M | 2 | 0.63 | 0.67 | 3.00 |
+| `e32cap` | 32 | 256 | 1024 | 0.25 | 133.8M | 2 | 0.72 | 0.75 | 3.02 |
+| `e8i256` | 8 | 256 | 1024 | 0.25 | 58.2M | 2 | 0.79 | 0.80 | 3.12 |
+| `sh4096` | 8 | 1024 | 4096 | 0.25 | 171.5M | 2 | 0.81 | 0.82 | 2.97 |
+
+Perplexities are not comparable across rows with different parameter counts; only the share is.
+Seed noise on the share is ~0.02.
+
+### C.3c Finding 12 — shared-LR hysteresis (16 layers, 251.0M, 1 seed)
+
+Shared-expert LR multiplier ramped ×0.1 → ×1.0 by step 9000 (~295M tokens).
+
+| tokens | baseline ×1.0 | static ×0.1 | ramp 0.1→1.0 |
+|---|---|---|---|
+| 98M | 0.84 | 0.21 | 0.42 |
+| 295M (ramp ends) | 0.58 | 0.14 | 0.15 |
+| 491M | 0.54 | 0.16 | 0.16 |
+| 983M | 0.59 | — | 0.21 |
+| final PPL | 2.90 | — | 2.89 |
 
 ### C.4 Finding 2 — aux-loss sweep (4 seeds), at 98M tokens
 
@@ -155,12 +191,31 @@ for m in 0.3 0.1; do for s in 0 1; do
 done; done   # x1.0 == the base1b runs
 python -m analysis.race --runs out/shlr0.1_s0,out/shlr0.1_s1 --tokens-per-domain 60000 --skip 3000
 
-# Finding 10 — #experts law
+# Finding 10 (RETRACTED) — #experts at fixed per-expert width; capacity rides along with E
 for E in 4 16 32; do for s in 0 1; do
   python -m analysis.pilot_train --num-experts $E --top-k 2 --steps 30000 --batch 64 \
     --save-every 3000 --seed $s --out out/e${E}_s$s
 done; done
 python -m analysis.race --runs out/e16_s0,out/e16_s1 --tokens-per-domain 60000 --skip 3000
+
+# Finding 11 — width-ratio series. Routed-width contrast at E=8 (I in 256, 1024, 2048):
+python -m analysis.pilot_train --num-layers 8 --num-experts 8 --top-k 2 \
+  --moe-intermediate $I --shared-intermediate 1024 --steps 30000 --batch 64 --seq-len 512 \
+  --lr 3e-4 --warmup 1500 --aux-coef 1e-2 --save-every 3000 --seed $s --out out/e8i${I}_s$s
+# shared-width contrast at E=8 (I_shared in 512, 1024, 4096) — routed branch identical:
+python -m analysis.pilot_train --num-layers 8 --num-experts 8 --top-k 2 \
+  --moe-intermediate 1024 --shared-intermediate $IS --steps 30000 --batch 64 --seq-len 512 \
+  --lr 3e-4 --warmup 1500 --aux-coef 1e-2 --save-every 3000 --seed $s --out out/sh${IS}_s$s
+# capacity-matched #experts sweep (E*I held at 8192), the clean version of Finding 10:
+python -m analysis.pilot_train --num-layers 8 --num-experts $E --top-k 2 \
+  --moe-intermediate $((8192/E)) --shared-intermediate 1024 --steps 30000 --batch 64 \
+  --seq-len 512 --lr 3e-4 --warmup 1500 --aux-coef 1e-2 --save-every 3000 --seed $s \
+  --out out/e${E}cap_s$s
+
+# Finding 12 — shared-LR ramped back to parity by step 9000
+python -m analysis.pilot_train --num-layers 16 --num-experts 8 --top-k 2 --steps 30000 \
+  --batch 64 --seq-len 512 --lr 3e-4 --warmup 1500 --aux-coef 1e-2 --save-every 3000 \
+  --shared-lr-mult 0.1 --shared-ramp-end 9000 --seed 0 --out out/dyn16_s0
 
 # Finding 2 — aux-loss sweep
 for a in 0.0 0.1; do for s in 0 1 2 3; do
