@@ -29,12 +29,12 @@ Minimum share reached over the trajectory, and share at 983M tokens.
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `e8i2048` | 8 | 8 | 2048 | 1024 | 2.0 | 4096 | 234.4M | 2 | 0.37 | 0.40 | 2.95 |
 | `e4wide` | 8 | 4 | 2048 | 1024 | 2.0 | 4096 | 133.7M | 2 | **0.25** | 0.28 | 2.99 |
-| `sh512` | 8 | 8 | 1024 | 512 | 2.0 | 2048 | 127.4M | 1 | 0.31 | 0.36 | 3.01 |
+| `sh512` | 8 | 8 | 1024 | 512 | 2.0 | 2048 | 127.4M | 2 | 0.28 | 0.34 | 3.01 |
 | `base1b` (ref) | 8 | 8 | 1024 | 1024 | 1.0 | 2048 | 133.7M | 4 | 0.47 | 0.50 | 3.00 |
 | `e16cap` | 8 | 16 | 512 | 1024 | 0.5 | 1024 | 133.7M | 2 | 0.63 | 0.67 | 3.00 |
 | `e32cap` | 8 | 32 | 256 | 1024 | 0.25 | 512 | 133.8M | 2 | 0.72 | 0.75 | 3.02 |
 | `e8i256` | 8 | 8 | 256 | 1024 | 0.25 | 512 | 58.2M | 2 | 0.79 | 0.80 | 3.12 |
-| `sh4096` | 8 | 8 | 1024 | 4096 | 0.25 | 2048 | 171.5M | 1 | **0.82** | 0.82 | 2.98 |
+| `sh4096` | 8 | 8 | 1024 | 4096 | 0.25 | 2048 | 171.5M | 2 | **0.81** | 0.82 | 2.97 |
 | `scale16_1b` (ref) | 16 | 8 | 1024 | 1024 | 1.0 | 2048 | 251.0M | 1 | 0.54 | 0.59 | 2.90 |
 | `dyn16` | 16 | 8 | 1024 | 1024 | 1.0 | 2048 | 251.0M | 1 | 0.14 | 0.21 | 2.89 |
 
@@ -49,12 +49,12 @@ Perplexities are **not** comparable across rows with different parameter counts
 
 | ratio I/I_shared | 2.0 | 1.0 | 0.5 | 0.25 |
 |---|---|---|---|---|
-| min share observed | 0.25 / 0.31 / 0.37 | 0.47 / 0.53 / 0.55 / 0.56 | 0.63 | 0.72 / 0.79 / 0.82 |
+| min share observed | 0.25 / 0.28 / 0.37 | 0.47 / 0.53 / 0.55 / 0.56 | 0.63 | 0.72 / 0.79 / 0.81 |
 
 The ratio-1.0 entries include the four ratio-1.0 points of the published E-sweep
 (E ∈ {4,8,16,32} at I = I_shared = 1024; see `results.md` Finding 10). The bands do not
 overlap: the ratio orders every configuration measured, across 8× in ratio, 4× in parameter
-count and 8× in expert count. Within a ratio level the residual spread is ~0.10 and is **not**
+count and 8× in expert count. Within a ratio level the residual spread is ~0.1 and is **not**
 consistently explained by E, by absolute capacity, or by total routed parameters — at ratio 2.0
 more experts raises the share (E=4 → 0.25 vs E=8 → 0.37) while at ratio 0.25 more experts
 lowers it (E=8 → 0.79 vs E=32 → 0.72).
@@ -74,12 +74,12 @@ capacity is *identical* in all three, 2048):
 
 | I_shared | 4096 | 1024 | 512 |
 |---|---|---|---|
-| min share | 0.82 | 0.47 | 0.31 |
+| min share | 0.81 | 0.47 | 0.28 |
 
 The second contrast is the decisive one: the routed branch is byte-for-byte the same in all
-three runs, and the split still moves by 0.51. Absolute routed capacity therefore does not
-govern the split. The two contrasts agree wherever they meet the same ratio (0.79 vs 0.82 at
-ratio 0.25; 0.37 vs 0.31 at ratio 2.0) despite parameter counts differing by up to 4×.
+three runs, and the split still moves by 0.53. Absolute routed capacity therefore does not
+govern the split. The two contrasts agree wherever they meet the same ratio (0.79 vs 0.81 at
+ratio 0.25; 0.37 vs 0.28 at ratio 2.0) despite parameter counts differing by up to 4×.
 
 ## What this changes
 
@@ -218,40 +218,43 @@ Seed 0 alone gave min share 0.81 and 0.35 for these two configurations; adding s
 them by 0.02. Seed noise on this quantity is therefore ~0.02, well below the effects reported
 above.
 
-### `sh512`, E=8 @ I=1024, I_shared=512, 1 seed (`ratio.log`)
+### `sh512`, E=8 @ I=1024, I_shared=512, 2 seeds (`ratio.log`)
 
 ```
-     0 |   10.49 |   +0.42±0.00 |   +0.00±0.00 |     0.0007 |          1.00
-  3000 |    4.16 |   +2.08±0.00 |   +1.60±0.00 |     0.0157 |          0.57
-  6000 |    3.62 |   +1.51±0.00 |   +2.53±0.00 |     0.0190 |          0.37
-  9000 |    3.41 |   +1.37±0.00 |   +2.88±0.00 |     0.0212 |          0.32
- 12000 |    3.29 |   +1.33±0.00 |   +3.02±0.00 |     0.0210 |          0.31
- 15000 |    3.21 |   +1.36±0.00 |   +3.04±0.00 |     0.0204 |          0.31
- 18000 |    3.14 |   +1.48±0.00 |   +3.08±0.00 |     0.0213 |          0.32
- 21000 |    3.08 |   +1.59±0.00 |   +3.11±0.00 |     0.0210 |          0.34
- 24000 |    3.04 |   +1.71±0.00 |   +3.12±0.00 |     0.0213 |          0.35
- 27000 |    3.02 |   +1.78±0.00 |   +3.17±0.00 |     0.0215 |          0.36
- 30000 |    3.01 |   +1.81±0.00 |   +3.16±0.00 |     0.0213 |          0.36
+     0 |   10.49 |   +0.43±0.00 |   +0.00±0.00 |     0.0008 |          1.00
+  3000 |    4.15 |   +1.96±0.12 |   +1.66±0.06 |     0.0157 |          0.54
+  6000 |    3.61 |   +1.41±0.11 |   +2.64±0.11 |     0.0201 |          0.35
+  9000 |    3.41 |   +1.27±0.11 |   +2.94±0.07 |     0.0231 |          0.30
+ 12000 |    3.29 |   +1.20±0.14 |   +3.14±0.12 |     0.0231 |          0.28
+ 15000 |    3.20 |   +1.21±0.15 |   +3.12±0.08 |     0.0220 |          0.28
+ 18000 |    3.13 |   +1.32±0.16 |   +3.11±0.03 |     0.0231 |          0.30
+ 21000 |    3.07 |   +1.41±0.18 |   +3.20±0.09 |     0.0231 |          0.31
+ 24000 |    3.03 |   +1.52±0.19 |   +3.18±0.06 |     0.0229 |          0.32
+ 27000 |    3.01 |   +1.59±0.19 |   +3.20±0.03 |     0.0227 |          0.33
+ 30000 |    3.01 |   +1.61±0.20 |   +3.19±0.03 |     0.0226 |          0.34
 ```
 
-### `sh4096`, E=8 @ I=1024, I_shared=4096, 1 seed (`ratio.log`)
+### `sh4096`, E=8 @ I=1024, I_shared=4096, 2 seeds (`ratio.log`)
 
 ```
-     0 |   10.41 |   +0.52±0.00 |   -0.00±0.00 |     0.0008 |          1.00
-  3000 |    4.16 |   +5.29±0.00 |   +0.27±0.00 |     0.0098 |          0.95
-  6000 |    3.72 |   +4.83±0.00 |   +0.57±0.00 |     0.0123 |          0.89
-  9000 |    3.43 |   +4.86±0.00 |   +0.78±0.00 |     0.0124 |          0.86
- 12000 |    3.29 |   +4.70±0.00 |   +0.91±0.00 |     0.0124 |          0.84
- 15000 |    3.20 |   +4.68±0.00 |   +0.99±0.00 |     0.0133 |          0.83
- 18000 |    3.11 |   +4.91±0.00 |   +1.07±0.00 |     0.0129 |          0.82
- 21000 |    3.05 |   +5.09±0.00 |   +1.14±0.00 |     0.0131 |          0.82
- 24000 |    3.01 |   +5.28±0.00 |   +1.18±0.00 |     0.0131 |          0.82
- 27000 |    2.98 |   +5.39±0.00 |   +1.21±0.00 |     0.0131 |          0.82
- 30000 |    2.98 |   +5.41±0.00 |   +1.22±0.00 |     0.0131 |          0.82
+     0 |   10.42 |   +0.51±0.02 |   -0.00±0.00 |     0.0009 |          1.00
+  3000 |    4.16 |   +5.31±0.02 |   +0.25±0.01 |     0.0080 |          0.95
+  6000 |    3.68 |   +4.89±0.06 |   +0.56±0.01 |     0.0099 |          0.90
+  9000 |    3.41 |   +4.63±0.23 |   +0.76±0.02 |     0.0098 |          0.86
+ 12000 |    3.27 |   +4.44±0.25 |   +0.88±0.03 |     0.0099 |          0.83
+ 15000 |    3.18 |   +4.51±0.17 |   +0.97±0.02 |     0.0104 |          0.82
+ 18000 |    3.10 |   +4.70±0.21 |   +1.04±0.04 |     0.0101 |          0.82
+ 21000 |    3.04 |   +4.93±0.16 |   +1.12±0.02 |     0.0104 |          0.81
+ 24000 |    2.99 |   +5.12±0.15 |   +1.14±0.04 |     0.0102 |          0.82
+ 27000 |    2.97 |   +5.26±0.12 |   +1.18±0.03 |     0.0103 |          0.82
+ 30000 |    2.97 |   +5.29±0.12 |   +1.18±0.03 |     0.0103 |          0.82
 ```
 
-Seed 1 of both `sh512` and `sh4096` was still training when this record was written; the
-two-seed analyses will overwrite the single-seed numbers above.
+Seed 1 of `sh512` and `sh4096` finished after the first version of this record was written;
+the tables above are the pooled two-seed analyses. Adding seed 1 moved the minimum share by
+0.03 (`sh512`, 0.31 → 0.28) and 0.01 (`sh4096`, 0.82 → 0.81) — consistent with the ~0.02 seed
+noise measured on `e8i256` / `e8i2048`, and it widens the shared-width contrast slightly rather
+than narrowing it.
 
 ## Reproduction
 
