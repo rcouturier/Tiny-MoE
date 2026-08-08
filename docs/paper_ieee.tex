@@ -228,12 +228,35 @@ when the shared expert is slowed. The shared expert is therefore not necessary f
 it performs in the baseline. The model places the work there because that is where it can be
 learned fastest, not because that is where it belongs.
 
-The control reproduces at twice the depth. On a 16-layer, 251M-parameter model the share at 98M
-tokens falls from 0.82 to 0.64 to 0.21 across the same three multipliers, again at unchanged
-perplexity. Depth does change the timing: the deeper baseline reaches a minimum of only 0.54 and
-does not cross to balance within 983M tokens, ending at 0.59. Left alone, a deeper model stays in
-the shared-dominated regime considerably longer, which sharpens rather than softens the warning of
-Section~\ref{sec:obs}.
+\subsection{The control holds at greater depth}
+
+A mechanism that depended on our particular depth would be of little interest, so we repeat the
+sweep on a model of twice the depth, 16 layers and 251M parameters. The control reproduces almost
+exactly. At 98M tokens the shared share falls from 0.82 to 0.64 to 0.21 across the same three
+multipliers, against 0.80, 0.56 and 0.14 at 8 layers, and perplexity is again unchanged. The right
+panel of Fig.~\ref{fig:scale} places the two depths side by side.
+
+What depth does change is the timing of the unaided crossover, and it changes it in the direction
+that makes the phenomenon more treacherous rather than less. The 8-layer baseline crosses to equal
+importance at roughly 295M tokens and stays there. The 16-layer baseline never crosses within our
+budget: it reaches a minimum of 0.54 near 491M tokens and then drifts back up to 0.59 by 983M, as
+the left panel of Fig.~\ref{fig:scale} shows. Deeper models therefore remain in the
+shared-dominated regime for considerably longer, which is what the mechanism predicts, since more
+residual capacity gives the shared expert's head start more room to compound. It also means the
+warning of Section~\ref{sec:obs} grows stronger with scale rather than weaker: the larger the
+model, the longer an observer will be able to look at it and conclude, wrongly, that its routed
+experts are redundant. We emphasize that this concerns the crossover reached without intervention;
+the following subsection shows the deeper model can be driven well past balance and kept there.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{fig5_scale.pdf}
+\caption{Left: shared branch share against tokens for the unaided baseline at two depths. The
+8-layer model crosses to equal importance; the 16-layer model approaches but does not, within 983M
+tokens. Right: the learning-rate control reproduces at twice the depth, lowering the share
+dose-dependently at both scales.}
+\label{fig:scale}
+\end{figure*}
 
 \subsection{A temporary handicap is enough}
 
