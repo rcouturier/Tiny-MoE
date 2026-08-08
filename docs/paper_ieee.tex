@@ -1,0 +1,396 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{cite}
+\usepackage[hidelinks]{hyperref}
+\graphicspath{{figures/}}
+
+\begin{document}
+
+\title{Routed Experts Are Not Redundant:\\ Training Dynamics and Branch Proportion in\\ Small Mixture-of-Experts Models}
+
+\author{\IEEEauthorblockN{AUTHOR NAMES}
+\IEEEauthorblockA{AFFILIATION\\ email@domain}}
+
+\maketitle
+
+\begin{abstract}
+Small Mixture-of-Experts language models built with an always-on shared expert appear to
+under-use their routed experts: removing the entire routed branch costs little perplexity, while
+removing the single shared expert costs a great deal. We show that this asymmetry reflects
+optimization dynamics and architectural proportion rather than any property of the computation
+being performed. Training Mixture-of-Experts models of 58M to 251M parameters on a domain-labelled
+corpus, we find the imbalance is transient, the two branches equalizing by roughly 300M tokens,
+and we trace it to a gradient-exposure race in which the shared expert, updated on every token,
+out-competes routed experts updated on a $k/E$ fraction of them. The race is causally
+controllable: slowing the shared expert reallocates computation to the routed branch, and a
+handicap applied over only the first tenth of training is enough to make that reallocation
+permanent. Where the branches finally settle is governed not by the number of experts but by the
+ratio of their widths, which orders eleven configurations spanning eightfold in ratio and
+eightfold in expert count. Across that entire range held-out perplexity varies by less than 0.1,
+so the placement of feed-forward computation in a small Mixture-of-Experts model is close to a
+free design choice.
+\end{abstract}
+
+\begin{IEEEkeywords}
+mixture of experts, training dynamics, sparse models, language models, expert specialization
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Mixture-of-Experts (MoE) layers replace a dense feed-forward block with a router that dispatches
+each token to a small number of experts. The DeepSeekMoE design~\cite{dai2024deepseekmoe} adds an
+always-on \emph{shared} expert beside the \emph{routed} ones, on the intuition that the shared
+expert absorbs computation common to all tokens and thereby frees the routed experts to
+specialize. Because small MoEs are inexpensive to train and every token can be labelled, they have
+become a common testbed for studying how experts divide work.
+
+In this small-scale regime a striking observation recurs. Ablating the entire routed branch barely
+moves held-out perplexity, whereas ablating the lone shared expert degrades it severely. Read at
+face value, the measurement says the routed experts are nearly useless, and it invites two
+explanations: either small MoEs are over-parametrized on the routed side, or the shared expert
+actively suppresses the routed ones. Both explanations attribute the imbalance to the
+architecture.
+
+We argue that neither is right, and that the imbalance says almost nothing about what the
+computation requires. It is instead the joint product of two things that have no obvious
+connection to the task: how quickly each branch is trained, and how wide each branch is. The
+apparent redundancy is transient, disappearing once the model has seen a few hundred million
+tokens. Its cause is a race for gradient signal that the shared expert wins by construction, and
+that a single learning-rate multiplier settles in either direction at no cost in perplexity.
+Applying that multiplier over the first tenth of training suffices; once the race is decided, the
+allocation persists after the handicap is removed. Finally, where the two branches come to rest is
+set by the ratio between their widths, and not, as the mechanism naively suggests, by the number
+of routed experts. Holding the routed branch identical down to its parameter shapes and varying
+only the shared expert's width moves the shared branch's share of ablation impact from 0.28 to
+0.81.
+
+Taken together these results reframe the shared/routed split as a near-neutral reparametrization.
+Held-out perplexity varies by less than 0.1 across configurations whose branch split spans 0.25 to
+0.81, which means a practitioner may place the computation more or less where they wish. That
+freedom matters whenever the routed experts are themselves the object of interest, as they are in
+interpretability work, expert pruning, and modular editing, and it means that a diagnosis of
+expert redundancy drawn from an undertrained checkpoint is not merely imprecise but misleading.
+
+\section{Related Work}
+
+Conditional computation through a sparsely gated MoE layer was introduced by Shazeer et
+al.~\cite{shazeer2017outrageously} and scaled by GShard~\cite{lepikhin2021gshard} and Switch
+Transformer~\cite{fedus2022switch}, the latter establishing the auxiliary load-balancing loss that
+we also use; ST-MoE~\cite{zoph2022stmoe} added the router $z$-loss for stability. Our backbone is a
+top-2 configuration in the style of Mixtral~\cite{jiang2024mixtral}.
+
+The always-on shared expert originates with DeepSeekMoE~\cite{dai2024deepseekmoe} and carries
+through DeepSeek-V2 and V3~\cite{deepseekv2,deepseekv3}, motivated by the argument that isolating
+common knowledge in a shared branch lets the routed experts specialize more sharply. That argument
+concerns what the branches represent. Our results concern how the branches are trained and
+proportioned, and they suggest that at small scale the second consideration dominates the first.
+
+Observational studies of expert behaviour report that experts organize more by token identity and
+surface form than by topic, both in Mixtral~\cite{jiang2024mixtral} and across training in
+OLMoE~\cite{muennighoff2024olmoe}. These studies characterize the outcome of training. We add a
+controlled causal probe and identify a training-dynamics cause for the small-scale imbalance that
+observational analysis alone cannot isolate.
+
+\section{Experimental Setup}
+
+\paragraph{Model} A decoder-only MoE implemented from scratch in PyTorch, using Multi-head Latent
+Attention~\cite{deepseekv2}, RoPE~\cite{su2021roformer} and RMSNorm~\cite{zhang2019rmsnorm}. Each
+layer carries $E$ routed experts and one shared expert with top-$k$ routing. The reference
+configuration has $E=8$, $k=2$, 8 layers, hidden size 512, context 512 and 134M parameters; every
+expert, routed or shared, has intermediate width 1024. Section~\ref{sec:ratio} varies the two
+widths independently and writes them $I$ per routed expert and $I_{\mathrm{shared}}$ for the shared
+one. Configurations range from 58M to 251M parameters. All runs use batch 64, sequence length 512,
+learning rate $3\times10^{-4}$ with 1500 warmup steps, and an auxiliary load-balancing coefficient
+of $10^{-2}$; 30\,000 steps correspond to 983M tokens. Every experiment fits on one RTX A6000.
+
+\paragraph{Data} Pre-training streams three token-labelled corpora: FineWeb-Edu~\cite{penedo2024fineweb}
+(60\%), Cosmopedia-v2~\cite{benallal2024cosmopedia} (25\%) and OpenWebMath~\cite{paster2023openwebmath}
+(15\%), tokenized with a 32k vocabulary and packed to 512 tokens. Held-out evaluation uses a
+skip-offset of the same streams rather than a fully disjoint split.
+
+\paragraph{Measuring where the computation lives} We ablate a whole branch, either all routed
+experts or the shared expert, and record the resulting increase in held-out perplexity. Ablating a
+single expert is uninformative under top-$k$ routing because the router simply reallocates its
+tokens to the survivors; only whole-branch ablation isolates a branch's contribution. We summarize
+the two measurements by the shared branch's share of total ablation impact,
+\begin{equation}
+s = \frac{\Delta_{\text{shared}}}{\Delta_{\text{shared}} + \Delta_{\text{routed}}},
+\end{equation}
+so that $s=0.5$ denotes branches of equal importance and $s\rightarrow1$ a shared-dominated model.
+Every trajectory we measured dips to a minimum and then rises slowly, so we report both the
+minimum reached and the value at 983M tokens. Seed-to-seed variation on $s$ is approximately 0.02,
+an order of magnitude below the effects discussed below.
+
+\section{Branch Importance Is a Function of Training Tokens}
+\label{sec:obs}
+
+We train the reference model for 983M tokens with four seeds and measure branch importance at
+every checkpoint. Table~\ref{tab:traj} and Fig.~\ref{fig:traj} show the result.
+
+\begin{table}[t]
+\centering
+\caption{Branch ablation impact over training, four seeds, mean $\pm$ std.}
+\label{tab:traj}
+\begin{tabular}{rrrrr}
+\toprule
+tokens & PPL & remove shared & remove routed & $s$ \\
+\midrule
+98M  & 4.18 & $+3.44\pm0.17$ & $+0.82\pm0.03$ & 0.81 \\
+197M & 3.63 & $+2.37\pm0.17$ & $+1.58\pm0.06$ & 0.60 \\
+295M & 3.41 & $+1.99\pm0.14$ & $+1.98\pm0.06$ & 0.50 \\
+491M & 3.20 & $+1.99\pm0.16$ & $+2.25\pm0.01$ & 0.47 \\
+983M & 3.00 & $+2.45\pm0.18$ & $+2.48\pm0.11$ & 0.50 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig1_trajectory.pdf}
+\caption{Ablation impact of removing the shared expert against all eight routed experts, over a
+four-seed trajectory at constant batch size. Bands are $\pm1$ standard deviation. The branches
+cross to equal importance by roughly 295M tokens.}
+\label{fig:traj}
+\end{figure}
+
+At 98M tokens the shared expert accounts for 81\% of the ablation impact and the routed experts do
+indeed look close to redundant. This is the regime in which many pilot studies operate, including
+our own earlier experiments. By 295M tokens the branches have equalized, and they remain balanced
+through 983M; routed specialization grows in parallel, with domain-conditioned normalized mutual
+information rising from 0.0008 to 0.017. All four seeds follow the same trajectory with tight
+error bars.
+
+The practical reading is narrow but firm. Branch importance is not a property of the architecture
+that can be measured once; it is a function of how much data the model has seen. Conclusions about
+routed redundancy drawn below a few hundred million tokens do not survive further training, and
+the effect is large enough that the sign of a comparison can change.
+
+\section{A Gradient-Exposure Race}
+\label{sec:mech}
+
+Why should the shared expert lead at all? The asymmetry is present in the update rule before it is
+present in the weights. Writing the block output on token $t$ as
+\begin{equation}
+y_t = s(x_t) + \sum_{e\in\mathrm{topk}(t)} g_{t,e}\, f_e(x_t),
+\end{equation}
+with $s$ the shared expert and $f_e$ the routed ones, a batch of $N$ tokens delivers gradient from
+all $N$ of them to the shared parameters but from only about $Nk/E$ to any given routed expert.
+Under a common learning rate the shared expert therefore accumulates roughly $E/k$ times more
+effective updates per parameter during the early phase, when gradients are large and the
+allocation of work is still plastic. The residual stream compounds this: it routes common
+computation to whichever submodule reduces loss fastest, which further starves the routed experts
+of useful gradient.
+
+This account makes two predictions. Reducing the shared expert's learning rate should let the
+routed experts capture computation earlier, and the crossover should scale with $E/k$. The first
+holds; the second does not, and Section~\ref{sec:ratio} is devoted to what replaces it.
+
+\subsection{The race can be rigged}
+
+We place the shared expert's parameters in their own optimizer group at $\mathrm{lr}\times m$ and
+leave everything else untouched. Table~\ref{tab:lr} reports the state at 98M tokens, deep in the
+regime where the baseline looks shared-dominated.
+
+\begin{table}[t]
+\centering
+\caption{Shared-expert learning-rate multiplier, two seeds, measured at 98M tokens.}
+\label{tab:lr}
+\begin{tabular}{lrrrr}
+\toprule
+$m$ & remove routed & remove shared & $s$ & PPL \\
+\midrule
+1.0 (baseline) & $+0.85$ & $+3.46$ & 0.80 & 4.16 \\
+0.3            & $+1.94$ & $+2.48$ & 0.56 & 4.10 \\
+0.1            & $+4.46$ & $+0.72$ & 0.14 & 4.10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig2_mechanism.pdf}
+\caption{Shared branch share against training tokens for three shared-expert learning-rate
+multipliers, two seeds. Slowing the shared expert moves the crossover earlier, dose-dependently,
+at unchanged perplexity.}
+\label{fig:lr}
+\end{figure}
+
+Slowing the shared expert makes the routed branch load-bearing far earlier: a fivefold increase in
+routed ablation impact at a fixed token budget, shifting the crossover from roughly 295M tokens to
+below 100M at $m=0.3$ and to before training settles at $m=0.1$. The effect is monotone and
+dose-dependent. It refutes the hypothesis that routed experts simply mature on their own schedule;
+they were being out-competed.
+
+Held-out perplexity is unchanged across the three conditions, and if anything marginally better
+when the shared expert is slowed. The shared expert is therefore not necessary for the computation
+it performs in the baseline. The model places the work there because that is where it can be
+learned fastest, not because that is where it belongs.
+
+The control reproduces at twice the depth. On a 16-layer, 251M-parameter model the share at 98M
+tokens falls from 0.82 to 0.64 to 0.21 across the same three multipliers, again at unchanged
+perplexity. Depth does change the timing: the deeper baseline reaches a minimum of only 0.54 and
+does not cross to balance within 983M tokens, ending at 0.59. Left alone, a deeper model stays in
+the shared-dominated regime considerably longer, which sharpens rather than softens the warning of
+Section~\ref{sec:obs}.
+
+\subsection{A temporary handicap is enough}
+
+If the split is decided by an early race, a handicap covering only that race should suffice, and
+the allocation should not revert once it is lifted. We test this on the 16-layer model by ramping
+$m$ linearly from 0.1 back to 1.0 by a chosen step, after which every parameter trains at the base
+rate. Fig.~\ref{fig:dose} shows the outcome for four ramp endpoints.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{fig6_hysteresis.pdf}
+\caption{Left: shared branch share against training tokens at 16 layers, for four handicap
+durations; the tick marks the point at which each handicap was lifted. Right: the resulting
+dose-response, final share against how long the handicap was held. Perplexity is flat across the
+whole series.}
+\label{fig:dose}
+\end{figure*}
+
+The reallocation does not undo. Once the handicap is removed the share stays near where the
+handicap left it rather than returning to the baseline trajectory, and the shared branch re-asserts
+itself only slowly. The response is monotone in the duration of the handicap: the share at 983M
+tokens is 0.33, 0.26, 0.21 and 0.19 for handicaps lifted at 98M, 197M, 295M and 491M tokens
+respectively, against 0.59 with no handicap at all. Final perplexities are 2.88, 2.88, 2.88 and
+2.89 against the baseline's 2.90.
+
+Two features of that curve matter more than its monotonicity. A brief handicap already does most
+of the work: lifting it after 98M tokens, one tenth of the budget, still reaches 0.33, which is
+about two thirds of the total reallocation available. And the curve saturates, the difference
+between the 295M and 491M endpoints being 0.02, equal to the seed noise on this quantity. Those two
+points are not distinguishable, and holding the handicap beyond roughly 295M tokens buys nothing we
+can measure. The knob is thus a schedule intervention rather than a standing tax on the shared
+expert, which is what a race-then-commit dynamic predicts: what wins the early race is what the
+residual stream subsequently builds upon.
+
+We replicated the 295M endpoint with a second seed and obtained identical values. The remaining
+three endpoints are single-seed, and the sweep covers one depth and one handicap strength, so we
+report the shape of the dependence rather than a functional law.
+
+\section{The Width Ratio Sets Where the Split Lands}
+\label{sec:ratio}
+
+The mechanism explains why the shared expert leads and shows that the lead can be reversed. It does
+not say where the split comes to rest, and the natural prediction from the gradient-exposure
+argument, that the resting point should follow $E/k$, turns out to be wrong. Across eleven 8-layer
+configurations trained to 983M tokens, expert count is nearly irrelevant and the ratio of the two
+branches' widths orders every run.
+
+\begin{table}[t]
+\centering
+\caption{Two disentangling contrasts, both at $E{=}8$, $k{=}2$. Values are the minimum shared share
+reached over the trajectory.}
+\label{tab:contrast}
+\begin{tabular}{lrrr}
+\toprule
+\multicolumn{4}{l}{\emph{Varying routed width}, $I_{\mathrm{shared}}=1024$}\\
+$I$        & 256    & 1024   & 2048 \\
+$s_{\min}$ & 0.79   & 0.47   & 0.37 \\
+parameters & 58.2M  & 133.7M & 234.4M \\
+\midrule
+\multicolumn{4}{l}{\emph{Varying shared width}, $I=1024$; routed branch identical}\\
+$I_{\mathrm{shared}}$ & 512 & 1024 & 4096 \\
+$s_{\min}$ & 0.28   & 0.47   & 0.81 \\
+parameters & 127.4M & 133.7M & 171.5M \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:contrast} isolates the two candidates. Both contrasts hold $E=8$ and $k=2$ fixed, so
+expert count, routing and per-expert gradient share are constant throughout. The second contrast is
+the decisive one: with $I$ pinned at 1024 the routed branch is identical across the three runs, the
+same number of experts of the same width receiving the same routed capacity $k\cdot I = 2048$, and
+yet the split moves by 0.53. Whatever governs the resting point, it is not the absolute capacity of
+the routed branch.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{fig3_ratio.pdf}
+\caption{Left: minimum shared share against the branch width ratio, one point per configuration,
+coloured by expert count; the bands at each ratio do not overlap. Right: the decisive contrast, in
+which the routed branch is identical across all three runs and only the shared expert's width
+changes.}
+\label{fig:ratio}
+\end{figure*}
+
+What the two contrasts share is the ratio $I/I_{\mathrm{shared}}$. Grouping every configuration by
+that ratio yields bands that do not overlap, as Fig.~\ref{fig:ratio} shows: shared shares of
+0.72--0.81 at ratio 0.25, 0.63 at ratio 0.5, 0.47--0.56 at ratio 1.0 and 0.25--0.37 at ratio 2.0.
+The ordering survives an eightfold range in ratio, an eightfold range in expert count and a
+fourfold range in parameter count.
+
+Expert count does not explain the residual spread within a band, and it does not even act in a
+consistent direction: at ratio 2.0 more experts raise the share, from 0.25 at $E=4$ to 0.37 at
+$E=8$, while at ratio 0.25 more experts lower it, from 0.79 at $E=8$ to 0.72 at $E=32$. A reader
+might still suspect that the sweep confounds expert count with capacity, since a naive sweep over
+$E$ at fixed per-expert width grows the routed branch as it grows $E$. Holding the product
+$E\cdot I$ at 8192 removes that confound and equalizes parameter counts; perplexity is then flat
+across $E\in\{4,8,16,32\}$ at 2.99, 3.00, 3.00 and 3.02, while the share continues to track the
+ratio that the same manipulation necessarily varies. Expert count is close to a free parameter for
+both quantities in this regime.
+
+The two results compose rather than compete. The gradient race decides which branch arrives first;
+the relative width of the branches decides how much computation each can absorb, and therefore
+where the allocation settles once the race is over. Both are reparametrizations rather than levers
+on quality: across the seven configurations between 127M and 234M parameters the minimum shared
+share spans 0.25 to 0.81 while final perplexity spans only 2.95 to 3.02.
+
+\section{Discussion}
+
+The picture that emerges is that a small MoE's division of feed-forward labour is only weakly
+determined by the task. Two quantities that a practitioner sets freely, the relative learning rate
+of the two branches and their relative width, move the split across almost its entire attainable
+range while leaving held-out perplexity within 0.1. The shared expert is not doing something the
+routed experts could not do; it is doing what it got to first, and it keeps as much of the work as
+its width allows.
+
+Three consequences follow. The first is diagnostic. Expert redundancy cannot be assessed from a
+single early checkpoint, because the measurement at 98M tokens and the measurement at 983M tokens
+disagree, and deeper models remain in the misleading regime longer. Branch importance should be
+reported as a trajectory. The second is a matter of experimental design: our own $E/k$ prediction
+survived a sweep over expert count only because that sweep let routed capacity ride along with the
+variable under study, and it failed as soon as capacity and parameter count were matched. Sweeps
+over architecture should fix what they are not testing. The third is prescriptive. When routed
+experts are the object of study, a modest learning-rate handicap on the shared expert engages them
+much sooner at no measured cost, and it need only be applied over the early part of training; more
+durably, one should simply avoid making the shared expert wide relative to the routed ones.
+
+Several limits bound these claims, and they concern generality rather than internal validity. All
+models here fall between 58M and 251M parameters and see at most 983M tokens, on a single data
+mixture and a single hardware configuration; whether the crossover and the two controls persist at
+production scale is untested and is the obvious next question. The width-ratio result establishes
+an ordering over an eightfold range at one depth, not a functional form, and we deliberately do not
+fit one. The dose-response over handicap duration is replicated at a single endpoint, and its
+remaining points rest on one seed each; the effect sizes there exceed the measured seed noise by a
+comfortable margin, but the shape of the saturation deserves a denser sweep. Finally, all of our
+evidence is perplexity and ablation impact, so we cannot say whether a reallocated split changes
+behaviour on downstream tasks, which is the measurement a practitioner would ultimately want.
+
+\section{Conclusion}
+
+Routed experts in small Mixture-of-Experts models are not redundant. They are out-competed early in
+training by a shared expert that receives gradient from every token, and the outcome of that
+competition is settled by two hyperparameters rather than by the demands of the data. Slowing the
+shared expert reverses the result, permanently, even when applied only over the first tenth of
+training; the relative width of the two branches then fixes where the split comes to rest, spanning
+shared shares from 0.25 to 0.81 while perplexity moves by less than 0.1. Where a small
+Mixture-of-Experts model puts its feed-forward computation is, to a good approximation, something
+the designer chooses rather than something the model discovers.
+
+\section*{Reproducibility}
+
+The model, training code and analysis toolkit, including branch ablation, routing capture and the
+trajectory drivers, are released with this paper; every experiment runs on a single GPU. Two
+implementation defects found and fixed during the study, a missing causal mask in the absorbed
+attention inference path and a broken CUDA reduction in the load-balancing loss, are documented in
+the version history.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
