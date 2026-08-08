@@ -131,26 +131,44 @@ shared expert is back at the base learning rate. Driver `run_dose.sh`, log `dose
 | 6000 | 197M | 1 | 0.16 | **0.26** | 2.88 |
 | 9000 (`dyn16`) | 295M | 2 | 0.14 | **0.21** | 2.88 |
 | 15000 | 491M | 1 | 0.14 | **0.19** | 2.89 |
-| ∞ (static ×0.1) | never lifted | 1 | 0.13 | — (run stopped at 491M) | — |
+| ∞ (`m01long`, static ×0.1) | never lifted | 1 | 0.08 | **0.14** | 2.91 |
 
 Three readings:
 
-1. **The effect is graded in the duration.** 0.33 → 0.26 → 0.21 → 0.19 as the handicap runs
+1. **The effect is graded in the duration.** 0.33 → 0.26 → 0.21 → 0.19 → 0.14 as the handicap runs
    longer, monotonically. The hysteresis is a dose-response, not an all-or-nothing switch.
-2. **A brief handicap already does most of the work.** Lifting it at 98M tokens — 10% of the
-   token budget — still lands at 0.33 against the baseline's 0.59, i.e. roughly two thirds of the
-   total achievable reallocation is bought in the first tenth of training.
-3. **The curve saturates.** The 9000 → 15000 gap is 0.02, equal to the seed noise measured on
-   this quantity elsewhere in the study; those two points are **not distinguishable**. Past
-   ~295M tokens, extending the handicap buys nothing measurable.
+2. **A brief handicap already does much of the work.** Lifting it at 98M tokens — 10% of the token
+   budget — lands at 0.33 against the baseline's 0.59, more than half the distance from the
+   baseline to the never-released limit of 0.14.
+3. **The response flattens but does not plateau.** Increments shrink by 0.07, 0.05 and 0.02 across
+   successive endpoints, and the 295M → 491M gap of 0.02 is at the seed-noise floor. But the
+   never-released limit sits a further 0.05 below the longest ramp, so there is no plateau
+   anywhere in the swept range. *(An earlier version of this record claimed the curve saturated
+   past ~295M tokens; the ∞ point shows that was too strong.)*
 
-Perplexity is flat across the whole series (2.88–2.89) and, if anything, slightly better than the
-baseline's 2.90 — consistent with Finding 9.
+**Releasing the handicap is marginally better than keeping it.** Every ramped condition ends at
+2.88, against 2.90 for the untouched baseline and 2.91 for the never-released run — which is the
+only condition here worse than doing nothing. The intervention is a schedule, not a standing tax.
 
-**Caveats.** The 3000 / 6000 / 15000 points are single-seed; only the 9000 point is replicated.
-All are at one depth (16 layers) and one handicap strength (×0.1); the strength axis is the
-separate dose-response already published as Finding 9. The ∞ endpoint is being extended to 983M
-(`run_asymptote.sh`, `m01long_s0`) to close the curve.
+**Caveats.** The 3000 / 6000 / 15000 / ∞ points are single-seed; only the 9000 point is
+replicated. All are at one depth (16 layers) and one handicap strength (×0.1); the strength axis is
+the separate dose-response already published as Finding 9.
+
+#### `m01long_s0` — static ×0.1, never released, to 983M (`asymptote.log`)
+
+```
+     0 |   10.41 |   +0.50±0.00 |   +0.00±0.00 |     0.0008 |          1.00
+  3000 |    4.13 |   +0.95±0.00 |   +3.37±0.00 |     0.0127 |          0.22
+  6000 |    3.58 |   +0.58±0.00 |   +4.78±0.00 |     0.0151 |          0.11
+  9000 |    3.35 |   +0.45±0.00 |   +5.11±0.00 |     0.0155 |          0.08
+ 12000 |    3.22 |   +0.46±0.00 |   +5.30±0.00 |     0.0150 |          0.08
+ 15000 |    3.13 |   +0.51±0.00 |   +5.21±0.00 |     0.0154 |          0.09
+ 18000 |    3.05 |   +0.59±0.00 |   +5.12±0.00 |     0.0149 |          0.10
+ 21000 |    2.99 |   +0.69±0.00 |   +5.07±0.00 |     0.0153 |          0.12
+ 24000 |    2.94 |   +0.76±0.00 |   +5.00±0.00 |     0.0155 |          0.13
+ 27000 |    2.92 |   +0.84±0.00 |   +5.01±0.00 |     0.0153 |          0.14
+ 30000 |    2.91 |   +0.84±0.00 |   +5.00±0.00 |     0.0153 |          0.14
+```
 
 ### Seed replication of the published point (`dyn16`, ramp_end 9000)
 

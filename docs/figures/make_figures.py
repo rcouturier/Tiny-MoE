@@ -228,12 +228,15 @@ for x, y in zip(xs, ys):
                 ha="center", fontsize=8.5)
 a2.annotate("no handicap", (0, ys[0]), xytext=(6, -12), textcoords="offset points",
             color=VERM, fontsize=8, fontweight="bold")
-a2.annotate("saturates", (395, 0.155), color=MUTED, fontsize=8, ha="center")
+ASYMPTOTE = 0.14  # static x0.1, never restored, at 983M tokens
+a2.axhline(ASYMPTOTE, color=MUTED, ls="--", lw=1.2, zorder=1)
+a2.annotate("never restored ($\\infty$): 0.14", (555, ASYMPTOTE), xytext=(0, 5),
+            textcoords="offset points", color=MUTED, fontsize=8, ha="right")
 a2.set_xlabel("handicap duration (M tokens)")
 a2.set_ylabel("shared share at 983M tokens")
 a2.set_title("Dose-response, at flat perplexity")
 a2.set_xlim(-45, 570)
-a2.set_ylim(0.10, 0.70)
+a2.set_ylim(0.08, 0.70)
 save(fig, "fig6_hysteresis")
 
 

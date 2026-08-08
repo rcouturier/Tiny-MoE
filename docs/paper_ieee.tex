@@ -279,17 +279,21 @@ The reallocation does not undo. Once the handicap is removed the share stays nea
 handicap left it rather than returning to the baseline trajectory, and the shared branch re-asserts
 itself only slowly. The response is monotone in the duration of the handicap: the share at 983M
 tokens is 0.33, 0.26, 0.21 and 0.19 for handicaps lifted at 98M, 197M, 295M and 491M tokens
-respectively, against 0.59 with no handicap at all. Final perplexities are 2.88, 2.88, 2.88 and
-2.89 against the baseline's 2.90.
+respectively, against 0.59 with no handicap at all and 0.14 for a handicap never lifted. Final
+perplexities are 2.88, 2.88, 2.88 and 2.89, against 2.90 for the baseline and 2.91 when the
+handicap is never released.
 
-Two features of that curve matter more than its monotonicity. A brief handicap already does most
-of the work: lifting it after 98M tokens, one tenth of the budget, still reaches 0.33, which is
-about two thirds of the total reallocation available. And the curve saturates, the difference
-between the 295M and 491M endpoints being 0.02, equal to the seed noise on this quantity. Those two
-points are not distinguishable, and holding the handicap beyond roughly 295M tokens buys nothing we
-can measure. The knob is thus a schedule intervention rather than a standing tax on the shared
-expert, which is what a race-then-commit dynamic predicts: what wins the early race is what the
-residual stream subsequently builds upon.
+Three features of that curve matter more than its monotonicity. A brief handicap already does much
+of the work: lifting it after 98M tokens, one tenth of the budget, reaches 0.33, which is more than
+half of the distance from the baseline to the never-released limit. The increments then shrink, by
+0.07, 0.05 and 0.02 across the successive endpoints, but the never-released limit at 0.14 lies a
+further 0.05 below the longest ramp, so the response flattens without reaching a plateau anywhere
+in the range we swept. And releasing the handicap is not merely harmless but marginally preferable:
+every ramped condition ends at 2.88, better than both the untouched baseline and the permanently
+handicapped run, which is the only condition here that is worse than doing nothing. The knob is
+thus a schedule intervention rather than a standing tax on the shared expert, which is what a
+race-then-commit dynamic predicts, since what wins the early race is what the residual stream
+subsequently builds upon.
 
 We replicated the 295M endpoint with a second seed and obtained identical values. The remaining
 three endpoints are single-seed, and the sweep covers one depth and one handicap strength, so we
