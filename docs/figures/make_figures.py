@@ -236,4 +236,33 @@ a2.set_xlim(-45, 570)
 a2.set_ylim(0.10, 0.70)
 save(fig, "fig6_hysteresis")
 
+
+# ---------- Fig 7: does reallocation buy routed specialization? ----------
+# Width lever, E=8 with the routed branch byte-identical (I=1024), at 983M tokens.
+w_share = [0.82, 0.50, 0.34]
+w_nmi = [0.0103, 0.0174, 0.0226]
+w_lab = ["4096", "1024", "512"]
+# Learning-rate lever at matched step (491M tokens), both depths.
+lr16_share, lr16_nmi = [0.67, 0.56, 0.16], [0.0108, 0.0135, 0.0151]
+lr8_share, lr8_nmi = [0.48, 0.52, 0.10], [0.0191, 0.0195, 0.0175]
+
+fig, ax = plt.subplots(figsize=(5.4, 3.4))
+style(ax)
+ax.plot(w_share, w_nmi, color=BLUE, lw=2, marker="o", ms=7, zorder=4,
+        label="width lever (routed branch identical)")
+for x, y, l, off in zip(w_share, w_nmi, w_lab, [(4, 10), (-6, -14), (-4, 10)]):
+    ax.annotate("$I_{shared}$=" + l, (x, y), xytext=off, textcoords="offset points",
+                ha="left" if off[0] > 0 else "right", fontsize=7.5, color=BLUE)
+ax.plot(lr16_share, lr16_nmi, color=GREEN, lw=1.8, ls="--", marker="s", ms=5.5, zorder=3,
+        label="LR lever, 16 layers")
+ax.plot(lr8_share, lr8_nmi, color=VERM, lw=1.8, ls=":", marker="^", ms=6, zorder=3,
+        label="LR lever, 8 layers")
+ax.invert_xaxis()
+ax.set_xlabel("shared branch share  (routed engagement increases $\\rightarrow$)")
+ax.set_ylabel("routed domain NMI")
+ax.set_title("Only the width lever reliably buys specialization")
+ax.set_ylim(0.009, 0.025)
+ax.legend(loc="upper left", frameon=False, fontsize=8)
+save(fig, "fig7_specialization")
+
 print("all figures written to", HERE)

@@ -363,6 +363,48 @@ where the allocation settles once the race is over. Both are reparametrizations 
 on quality: across the seven configurations between 127M and 234M parameters the minimum shared
 share spans 0.25 to 0.81 while final perplexity spans only 2.95 to 3.02.
 
+\section{Does Reallocation Buy Specialization?}
+\label{sec:spec}
+
+The motivation for wanting routed experts engaged is usually that they are the object of study, so
+it matters whether experts forced to carry more computation also organize their work more sharply.
+We measure gate-weighted normalized mutual information between expert assignment and the domain
+label of each token, comparing at matched training steps and, where possible, at identical routed
+architecture. Fig.~\ref{fig:spec} collects the result, and it is not the simple one.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig7_specialization.pdf}
+\caption{Routed domain specialization against branch split, with routed engagement increasing to
+the right. The width lever, whose three runs share a byte-identical routed branch, more than
+doubles specialization. The learning-rate lever helps at 16 layers, where the baseline is still
+shared-dominated, and hurts at 8 layers, where it is not.}
+\label{fig:spec}
+\end{figure}
+
+The width lever delivers. Holding $E=8$ and $I=1024$ so that the routed branch is identical across
+runs and varying only $I_{\mathrm{shared}}$, domain NMI at 983M tokens rises from 0.0103 to 0.0174
+to 0.0226 as the shared share falls from 0.82 to 0.50 to 0.34. That is a factor of 2.2 in
+specialization obtained without touching the routed experts at all, and without cost in perplexity.
+
+The learning-rate lever does not, or not reliably. At 16 layers, measured at 491M tokens where the
+baseline remains shared-dominated, slowing the shared expert raises NMI monotonically from 0.0108
+to 0.0135 to 0.0151. At 8 layers, where the baseline has already crossed to balance by that point,
+the same intervention moves NMI the other way, from 0.0191 at $m=1.0$ to 0.0175 at $m=0.1$. The
+dose-response series of Section~\ref{sec:mech} is similarly equivocal: NMI increases with handicap
+duration among the ramped runs but the unhandicapped baseline falls inside their range rather than
+below it.
+
+The pattern these disagreements share is that specialization tracks how much the routed branch has
+genuinely been trained, which rises as it takes over computation but flattens near balance and can
+fall once the shared branch is starved past it. Engagement and specialization are therefore
+related but distinct axes, and the distinction is practical: an experimenter who wants routed
+experts that are better objects of interpretability should change the branch widths rather than
+the learning rate, even though both move the split by comparable amounts. We note that domain
+labelling is one specialization axis among several, that our 16-layer learning-rate runs are
+single-seed, and that we deliberately exclude comparisons across expert count here because NMI
+grows mechanically with the number of experts.
+
 \section{Discussion}
 
 The picture that emerges is that a small MoE's division of feed-forward labour is only weakly
@@ -378,10 +420,12 @@ disagree, and deeper models remain in the misleading regime longer. Branch impor
 reported as a trajectory. The second is a matter of experimental design: our own $E/k$ prediction
 survived a sweep over expert count only because that sweep let routed capacity ride along with the
 variable under study, and it failed as soon as capacity and parameter count were matched. Sweeps
-over architecture should fix what they are not testing. The third is prescriptive. When routed
-experts are the object of study, a modest learning-rate handicap on the shared expert engages them
-much sooner at no measured cost, and it need only be applied over the early part of training; more
-durably, one should simply avoid making the shared expert wide relative to the routed ones.
+over architecture should fix what they are not testing. The third is prescriptive, and
+Section~\ref{sec:spec} makes it sharper than we expected. A modest learning-rate handicap on the
+shared expert engages the routed branch much sooner at no measured cost, and need only be applied
+over the early part of training; but engagement bought that way does not reliably come with
+sharper specialization. If the routed experts are wanted merely \emph{used}, either lever serves.
+If they are wanted \emph{legible}, the width ratio is the one that works.
 
 Several limits bound these claims, and they concern generality rather than internal validity. All
 models here fall between 58M and 251M parameters and see at most 983M tokens, on a single data
@@ -390,9 +434,11 @@ production scale is untested and is the obvious next question. The width-ratio r
 an ordering over an eightfold range at one depth, not a functional form, and we deliberately do not
 fit one. The dose-response over handicap duration is replicated at a single endpoint, and its
 remaining points rest on one seed each; the effect sizes there exceed the measured seed noise by a
-comfortable margin, but the shape of the saturation deserves a denser sweep. Finally, all of our
-evidence is perplexity and ablation impact, so we cannot say whether a reallocated split changes
-behaviour on downstream tasks, which is the measurement a practitioner would ultimately want.
+comfortable margin, but the shape of the saturation deserves a denser sweep. Finally, our evidence
+is perplexity, ablation impact and routing statistics. At this scale standard reasoning and
+question-answering benchmarks sit at or near chance, so we cannot say whether a reallocated split
+changes downstream behaviour; that is the measurement a practitioner would ultimately want, and
+answering it at all requires a larger model rather than a further experiment on this one.
 
 \section{Conclusion}
 

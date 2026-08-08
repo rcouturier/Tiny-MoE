@@ -392,6 +392,54 @@ Perplexity is flat across the entire series (2.88–2.89) and slightly better th
 are at one depth and one handicap strength. Full per-checkpoint tables in
 `docs/branch-split-runs.md`.
 
+## Finding 13 — Reallocation buys routed specialization, but only via the width lever
+
+The study is motivated by routed experts being the object of interpretability work, and Findings 9
+and 11 give two ways to make them carry more computation at no perplexity cost. Do the resulting
+routed experts actually *specialize* more? The `routed NMI` column has been recorded throughout;
+this reads it properly, at matched training steps and matched architecture.
+
+**The width lever: yes, and cleanly.** Holding the routed branch byte-for-byte identical (E=8,
+I=1024) and varying only the shared expert's width, at 983M tokens:
+
+| `I_shared` | 4096 | 1024 | 512 |
+|---|---|---|---|
+| shared share @983M | 0.82 | 0.50 | 0.34 |
+| routed domain NMI | 0.0103 | 0.0174 | **0.0226** |
+
+A factor **2.2** in domain specialization with the routed branch untouched. Widening the E=8 set to
+let `I` vary too keeps the ordering nearly intact — NMI 0.0103 / 0.0130 / 0.0174 / 0.0239 / 0.0226
+at shares 0.82 / 0.80 / 0.50 / 0.40 / 0.34 — though those runs differ in routed capacity, so the
+byte-identical contrast above is the one to trust.
+
+**The learning-rate lever: only while the model is still shared-dominated.** At matched step
+(491M tokens), the two depths disagree:
+
+| | ×1.0 | ×0.3 | ×0.1 |
+|---|---|---|---|
+| 16 layers — share | 0.67 | 0.56 | 0.16 |
+| 16 layers — NMI | 0.0108 | 0.0135 | **0.0151** |
+| 8 layers — share | 0.48 | 0.52 | 0.10 |
+| 8 layers — NMI | 0.0191 | 0.0195 | **0.0175** |
+
+At 16 layers, where the baseline is still shared-dominated at 491M, slowing the shared expert
+raises routed NMI monotonically. At 8 layers, where the baseline has *already* crossed to balance,
+pushing further into routed dominance **lowers** it. The dose-response series at 983M is likewise
+muddled: NMI 0.0123 / 0.0111 / 0.0118 / 0.0142 / 0.0145 for handicaps of 0 / 98M / 197M / 295M /
+491M — monotone among the ramps but with the baseline sitting inside the range, not below it.
+
+**Reading.** Engagement and specialization are related but not the same axis. Routed domain
+specialization tracks how much the routed branch has been genuinely trained, which rises as it
+takes over computation — but it saturates around balance and can decline once the shared branch is
+starved past it. Practically this sharpens the paper's own recommendation: **if the goal is routed
+experts that are better objects of study, the branch width ratio is the lever, not the learning
+rate.** The learning-rate knob buys engagement early and reliably; it does not reliably buy
+interpretability.
+
+**Caveats.** Single seed on the 16-layer LR runs; NMI grows mechanically with E (Finding 6) so
+cross-E comparisons are excluded here; domain NMI is one specialization axis among several
+(Finding 3) and the surface-form axis is not analyzed in this comparison.
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
