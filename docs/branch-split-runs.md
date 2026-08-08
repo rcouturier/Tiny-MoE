@@ -36,7 +36,7 @@ Minimum share reached over the trajectory, and share at 983M tokens.
 | `e8i256` | 8 | 8 | 256 | 1024 | 0.25 | 512 | 58.2M | 2 | 0.79 | 0.80 | 3.12 |
 | `sh4096` | 8 | 8 | 1024 | 4096 | 0.25 | 2048 | 171.5M | 2 | **0.81** | 0.82 | 2.97 |
 | `scale16_1b` (ref) | 16 | 8 | 1024 | 1024 | 1.0 | 2048 | 251.0M | 1 | 0.54 | 0.59 | 2.90 |
-| `dyn16` | 16 | 8 | 1024 | 1024 | 1.0 | 2048 | 251.0M | 1 | 0.14 | 0.21 | 2.89 |
+| `dyn16` | 16 | 8 | 1024 | 1024 | 1.0 | 2048 | 251.0M | 2 | 0.14 | 0.21 | 2.88 |
 
 `base1b` and `scale16_1b` are the already-published baselines (`finding8.log`, `extend.log`),
 repeated here as reference rows. `dyn16` is the dynamic shared-LR run (see below), not an
@@ -98,7 +98,8 @@ ratio 0.25; 0.37 vs 0.28 at ratio 2.0) despite parameter counts differing by up 
 ## Dynamic shared-LR (`dyn16`) — hysteresis
 
 16 layers, 251.0M params, shared-expert LR multiplier ramped from ×0.1 up to ×1.0 by step 9000
-(~295M tokens), 1 seed. Compare to the published 16-layer runs: baseline ×1.0 and static ×0.1.
+(~295M tokens), **2 seeds** (seed 1 added 2026-08-08, see the dose-response section below).
+Compare to the published 16-layer runs: baseline ×1.0 and static ×0.1.
 
 | tokens | baseline ×1.0 | static ×0.1 | ramp 0.1→1.0 |
 |---|---|---|---|
@@ -111,8 +112,118 @@ ratio 0.25; 0.37 vs 0.28 at ratio 2.0) despite parameter counts differing by up 
 Once the handicap is lifted the reallocation does not undo: the share stays at 0.15–0.21
 through 983M tokens instead of returning toward the baseline's 0.59, at unchanged perplexity.
 The shared branch does slowly re-assert (0.14 → 0.21 between 295M and 983M), far more slowly
-than the baseline's rise. **Single seed, single ramp endpoint, single depth** — this needs
-replication and a dose-response before it can carry weight.
+than the baseline's rise.
+
+The two caveats stated here originally — single seed, single ramp endpoint — are both addressed
+by the run series below. The single-depth caveat stands.
+
+## Dose-response over the handicap duration
+
+Experiments run **2026-08-07 → 2026-08-08**. All: 16 layers, 251.0M params, `--shared-lr-mult 0.1`,
+30000 steps ≈ 983M tokens, seed 0 unless noted; only `--shared-ramp-end` varies. The ramp is
+linear in step, `mult = 0.1 + 0.9·min(1, step/ramp_end)`, so `ramp_end` is the step by which the
+shared expert is back at the base learning rate. Driver `run_dose.sh`, log `dose.log`.
+
+| ramp end (step) | handicap lifted at | seeds | min share | **@983M** | final PPL |
+|---|---|---|---|---|---|
+| — (baseline ×1.0) | never applied | 1 | 0.54 | **0.59** | 2.90 |
+| 3000 | 98M tokens | 1 | 0.24 | **0.33** | 2.88 |
+| 6000 | 197M | 1 | 0.16 | **0.26** | 2.88 |
+| 9000 (`dyn16`) | 295M | 2 | 0.14 | **0.21** | 2.88 |
+| 15000 | 491M | 1 | 0.14 | **0.19** | 2.89 |
+| ∞ (static ×0.1) | never lifted | 1 | 0.13 | — (run stopped at 491M) | — |
+
+Three readings:
+
+1. **The effect is graded in the duration.** 0.33 → 0.26 → 0.21 → 0.19 as the handicap runs
+   longer, monotonically. The hysteresis is a dose-response, not an all-or-nothing switch.
+2. **A brief handicap already does most of the work.** Lifting it at 98M tokens — 10% of the
+   token budget — still lands at 0.33 against the baseline's 0.59, i.e. roughly two thirds of the
+   total achievable reallocation is bought in the first tenth of training.
+3. **The curve saturates.** The 9000 → 15000 gap is 0.02, equal to the seed noise measured on
+   this quantity elsewhere in the study; those two points are **not distinguishable**. Past
+   ~295M tokens, extending the handicap buys nothing measurable.
+
+Perplexity is flat across the whole series (2.88–2.89) and, if anything, slightly better than the
+baseline's 2.90 — consistent with Finding 9.
+
+**Caveats.** The 3000 / 6000 / 15000 points are single-seed; only the 9000 point is replicated.
+All are at one depth (16 layers) and one handicap strength (×0.1); the strength axis is the
+separate dose-response already published as Finding 9. The ∞ endpoint is being extended to 983M
+(`run_asymptote.sh`, `m01long_s0`) to close the curve.
+
+### Seed replication of the published point (`dyn16`, ramp_end 9000)
+
+Pooling seed 1 with the published seed 0 changes nothing: minimum share 0.14 and 0.21 at 983M in
+both. Seed spread on the ablation deltas is ±0.01–0.10 PPL. The single-seed result stands.
+
+### Per-checkpoint tables (dose-response)
+
+Columns as above: `step | basePPL | Δrm shared | Δrm routed | routed NMI | shared/(sh+rt)`.
+
+#### `dyn16_r3000_s0` — ramp ends at 98M tokens (`dose.log`)
+
+```
+     0 |   10.41 |   +0.50±0.00 |   +0.00±0.00 |     0.0008 |          1.00
+  3000 |    4.12 |   +1.35±0.00 |   +1.75±0.00 |     0.0099 |          0.44
+  6000 |    3.55 |   +0.90±0.00 |   +2.75±0.00 |     0.0116 |          0.25
+  9000 |    3.32 |   +0.90±0.00 |   +2.89±0.00 |     0.0112 |          0.24
+ 12000 |    3.19 |   +0.96±0.00 |   +2.99±0.00 |     0.0115 |          0.24
+ 15000 |    3.11 |   +1.04±0.00 |   +2.95±0.00 |     0.0113 |          0.26
+ 18000 |    3.02 |   +1.15±0.00 |   +2.94±0.00 |     0.0113 |          0.28
+ 21000 |    2.96 |   +1.27±0.00 |   +2.97±0.00 |     0.0114 |          0.30
+ 24000 |    2.91 |   +1.39±0.00 |   +2.96±0.00 |     0.0112 |          0.32
+ 27000 |    2.89 |   +1.47±0.00 |   +3.02±0.00 |     0.0111 |          0.33
+ 30000 |    2.88 |   +1.49±0.00 |   +3.01±0.00 |     0.0111 |          0.33
+```
+
+#### `dyn16_r6000_s0` — ramp ends at 197M tokens (`dose.log`)
+
+```
+     0 |   10.41 |   +0.50±0.00 |   +0.00±0.00 |     0.0008 |          1.00
+  3000 |    4.12 |   +1.53±0.00 |   +1.95±0.00 |     0.0112 |          0.44
+  6000 |    3.56 |   +0.69±0.00 |   +3.21±0.00 |     0.0116 |          0.18
+  9000 |    3.32 |   +0.67±0.00 |   +3.42±0.00 |     0.0123 |          0.16
+ 12000 |    3.19 |   +0.67±0.00 |   +3.40±0.00 |     0.0120 |          0.17
+ 15000 |    3.11 |   +0.77±0.00 |   +3.34±0.00 |     0.0120 |          0.19
+ 18000 |    3.02 |   +0.87±0.00 |   +3.33±0.00 |     0.0116 |          0.21
+ 21000 |    2.96 |   +0.96±0.00 |   +3.36±0.00 |     0.0119 |          0.22
+ 24000 |    2.91 |   +1.07±0.00 |   +3.30±0.00 |     0.0119 |          0.24
+ 27000 |    2.89 |   +1.14±0.00 |   +3.36±0.00 |     0.0119 |          0.25
+ 30000 |    2.88 |   +1.16±0.00 |   +3.35±0.00 |     0.0118 |          0.26
+```
+
+#### `dyn16_s0` + `dyn16_s1` — ramp ends at 295M tokens, 2 seeds pooled (`dose.log`)
+
+```
+     0 |   10.41 |   +0.48±0.01 |   +0.00±0.00 |     0.0008 |          1.00
+  3000 |    4.12 |   +1.59±0.01 |   +2.23±0.05 |     0.0123 |          0.42
+  6000 |    3.55 |   +0.99±0.05 |   +3.20±0.10 |     0.0150 |          0.24
+  9000 |    3.33 |   +0.62±0.01 |   +3.57±0.07 |     0.0158 |          0.15
+ 12000 |    3.19 |   +0.59±0.01 |   +3.66±0.09 |     0.0151 |          0.14
+ 15000 |    3.10 |   +0.66±0.03 |   +3.62±0.05 |     0.0146 |          0.15
+ 18000 |    3.02 |   +0.73±0.01 |   +3.57±0.04 |     0.0148 |          0.17
+ 21000 |    2.96 |   +0.82±0.01 |   +3.64±0.01 |     0.0147 |          0.18
+ 24000 |    2.91 |   +0.90±0.02 |   +3.58±0.01 |     0.0144 |          0.20
+ 27000 |    2.89 |   +0.97±0.02 |   +3.62±0.01 |     0.0143 |          0.21
+ 30000 |    2.88 |   +0.98±0.03 |   +3.63±0.04 |     0.0142 |          0.21
+```
+
+#### `dyn16_r15000_s0` — ramp ends at 491M tokens (`dose.log`)
+
+```
+     0 |   10.41 |   +0.50±0.00 |   +0.00±0.00 |     0.0008 |          1.00
+  3000 |    4.13 |   +1.41±0.00 |   +2.53±0.00 |     0.0121 |          0.36
+  6000 |    3.57 |   +1.04±0.00 |   +3.34±0.00 |     0.0144 |          0.24
+  9000 |    3.34 |   +0.86±0.00 |   +3.57±0.00 |     0.0145 |          0.19
+ 12000 |    3.20 |   +0.71±0.00 |   +3.64±0.00 |     0.0148 |          0.16
+ 15000 |    3.12 |   +0.63±0.00 |   +3.75±0.00 |     0.0152 |          0.14
+ 18000 |    3.03 |   +0.67±0.00 |   +3.79±0.00 |     0.0143 |          0.15
+ 21000 |    2.96 |   +0.73±0.00 |   +3.74±0.00 |     0.0146 |          0.16
+ 24000 |    2.92 |   +0.81±0.00 |   +3.69±0.00 |     0.0147 |          0.18
+ 27000 |    2.89 |   +0.88±0.00 |   +3.78±0.00 |     0.0146 |          0.19
+ 30000 |    2.89 |   +0.90±0.00 |   +3.79±0.00 |     0.0145 |          0.19
+```
 
 ## Raw tables
 
@@ -284,6 +395,21 @@ python -m analysis.pilot_train --num-layers 8 --num-experts 8 --top-k 2 \
 python -m analysis.pilot_train --num-layers 8 --num-experts 8 --top-k 2 \
   --moe-intermediate 1024 --shared-intermediate $IS --steps 30000 --batch 64 --seq-len 512 \
   --lr 3e-4 --warmup 1500 --aux-coef 1e-2 --save-every 3000 --seed $s --out sh${IS}_s$s
+
+# dose-response over the handicap duration (16 layers, mult 0.1, only ramp_end varies)
+for r in 3000 6000 15000; do
+  python -m analysis.pilot_train --num-layers 16 --num-experts 8 --top-k 2 --steps 30000 \
+    --batch 64 --seq-len 512 --lr 3e-4 --warmup 1500 --aux-coef 1e-2 --save-every 3000 \
+    --shared-lr-mult 0.1 --shared-ramp-end $r --seed 0 --out dyn16_r${r}_s0
+done
+# second seed on the published ramp_end=9000 point
+python -m analysis.pilot_train --num-layers 16 --num-experts 8 --top-k 2 --steps 30000 \
+  --batch 64 --seq-len 512 --lr 3e-4 --warmup 1500 --aux-coef 1e-2 --save-every 3000 \
+  --shared-lr-mult 0.1 --shared-ramp-end 9000 --seed 1 --out dyn16_s1
+# the infinite-ramp asymptote: static x0.1 out to 983M
+python -m analysis.pilot_train --num-layers 16 --num-experts 8 --top-k 2 --steps 30000 \
+  --batch 64 --seq-len 512 --lr 3e-4 --warmup 1500 --aux-coef 1e-2 --save-every 3000 \
+  --shared-lr-mult 0.1 --seed 0 --out m01long_s0
 
 # analysis (pool seeds with a comma-separated list)
 python -m analysis.race --runs <run_dir>[,<run_dir>...] --tokens-per-domain 60000 --skip 3000
