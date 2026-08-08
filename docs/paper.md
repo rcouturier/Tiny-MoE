@@ -237,21 +237,39 @@ on the 16-layer model (251M parameters, 1 seed) by ramping the shared-expert LR 
 | 983M | 0.59 | — | **0.21** |
 | final PPL | 2.90 | — | 2.89 |
 
-![Hysteresis](figures/fig6_hysteresis.png)
-
-*Figure 6: the shared branch's share vs. tokens at 16 layers. Ramping the shared-expert LR back
-to parity by 295M tokens (shaded) leaves the reallocation essentially in place through 1B tokens,
-rather than returning to the baseline trajectory.*
-
 The reallocation **does not undo**. By the end of the ramp the ramped run has converged onto the
 static-×0.1 trajectory, and once the handicap is gone it stays there: 0.21 at 983M tokens versus
-the baseline's 0.59, at equal perplexity (2.89 vs 2.90). The shared branch does slowly re-assert
+the baseline's 0.59, at equal perplexity (2.88 vs 2.90). The shared branch does slowly re-assert
 (0.14 → 0.21 between 295M and 983M), far more slowly than the baseline's rise. This is what a
 race-then-commit dynamic predicts — who wins the early race is what the residual stream then
 builds on — and it means the knob is a *training-schedule* intervention, not a permanent tax on
-the shared expert. It is, however, a **single seed at a single ramp endpoint and a single depth**;
-a dose–response over the ramp endpoint is the obvious next control and we do not claim more than
-existence here.
+the shared expert.
+
+**How long must the handicap last?** We sweep the ramp endpoint over 98M / 197M / 295M / 491M
+tokens, changing nothing else:
+
+| handicap held for | 0 (baseline) | 98M | 197M | 295M | 491M |
+|---|---|---|---|---|---|
+| shared share at 983M | 0.59 | 0.33 | 0.26 | **0.21** | 0.19 |
+| final PPL | 2.90 | 2.88 | 2.88 | 2.88 | 2.89 |
+
+![Hysteresis and dose-response](figures/fig6_hysteresis.png)
+
+*Figure 6: (left) the shared branch's share vs. tokens at 16 layers, for four handicap durations;
+the tick marks the token count at which each handicap was lifted. (right) the resulting
+dose-response: final share against how long the handicap was held, at flat perplexity.*
+
+The response is **monotone and graded in the duration**, which — together with Section 5's
+dose-response over handicap *strength* — gives the race two independent, monotone control axes.
+Two features of the curve matter more than its existence. First, **a brief handicap already does
+most of the work**: lifting it at 98M tokens, one tenth of the budget, still lands at 0.33 against
+the baseline's 0.59, roughly two thirds of the total achievable reallocation. Second, **the curve
+saturates**: the 295M → 491M difference is 0.02, equal to the seed noise on this quantity, so
+those two points are not distinguishable and extending the handicap past ~295M tokens buys nothing
+measurable. Perplexity is flat throughout (2.88–2.89), slightly better than the baseline.
+
+The 295M point is 2 seeds; the other three are single-seed, and the whole sweep is at one depth
+and one handicap strength.
 
 ## 6. What sets the split: the routed:shared width ratio
 

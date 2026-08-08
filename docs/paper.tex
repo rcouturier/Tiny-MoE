@@ -274,11 +274,23 @@ multiplier from $\times0.1$ up to $\times1.0$ by step 9000 ($\sim$295M tokens) o
 (Table~\ref{tab:hyst}, Figure~\ref{fig:hyst}). The reallocation \textbf{does not undo}: by the end
 of the ramp the ramped run has converged onto the static-$\times0.1$ trajectory, and once the
 handicap is gone it stays there---$0.21$ at 983M tokens versus the baseline's $0.59$, at equal
-perplexity (2.89 vs.\ 2.90). The shared branch re-asserts only slowly ($0.14\rightarrow0.21$ between
+perplexity (2.88 vs.\ 2.90). The shared branch re-asserts only slowly ($0.14\rightarrow0.21$ between
 295M and 983M), far more slowly than the baseline's rise. This is what a race-then-commit dynamic
 predicts, and it makes the knob a \emph{training-schedule} intervention rather than a permanent tax
-on the shared expert. It is, however, a single seed at one ramp endpoint and one depth; we claim
-existence, not a law.
+on the shared expert.
+
+\paragraph{How long must the handicap last?} Sweeping the ramp endpoint over 98M / 197M / 295M /
+491M tokens and changing nothing else gives a \textbf{monotone, graded} response: the shared share
+at 983M tokens is $0.33 / 0.26 / 0.21 / 0.19$ against the baseline's $0.59$, at final perplexities
+of $2.88 / 2.88 / 2.88 / 2.89$ against $2.90$. Together with the dose-response over handicap
+\emph{strength} above, the race therefore has two independent, monotone control axes. Two features
+of the curve matter more than its existence. First, \textbf{a brief handicap already does most of
+the work}: lifting it at 98M tokens---one tenth of the budget---still lands at $0.33$, roughly two
+thirds of the total achievable reallocation. Second, \textbf{the curve saturates}: the
+$295\text{M}\rightarrow491$M difference is $0.02$, equal to the seed noise on this quantity, so
+those two points are not distinguishable and extending the handicap past $\sim$295M tokens buys
+nothing measurable. The 295M point is 2 seeds; the other three are single-seed, and the whole
+sweep is at one depth and one handicap strength.
 
 \begin{table}[t]
 \centering
@@ -301,10 +313,10 @@ final PPL           & 2.90 & ---  & 2.89 \\
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.72\linewidth]{fig6_hysteresis.pdf}
-\caption{Ramping the shared-expert learning rate back to parity by 295M tokens (shaded) leaves the
-reallocation essentially in place through 1B tokens, rather than returning to the baseline
-trajectory. 16 layers, 251M parameters, 1 seed.}
+\includegraphics[width=0.92\linewidth]{fig6_hysteresis.pdf}
+\caption{(left) shared branch's share vs.\ tokens at 16 layers, for four handicap durations; the
+tick marks where each handicap was lifted. (right) the resulting dose-response: final share
+against how long the handicap was held, at flat perplexity.}
 \label{fig:hyst}
 \end{figure}
 

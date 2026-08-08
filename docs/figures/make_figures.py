@@ -182,28 +182,58 @@ save(fig, "fig5_scale")
 tok_h = np.array([98, 197, 295, 393, 491, 590, 688, 786, 885, 983])
 base_16 = np.array([0.84, 0.65, 0.58, 0.55, 0.54, 0.56, 0.56, 0.58, 0.59, 0.59])
 ramp_16 = np.array([0.42, 0.23, 0.15, 0.14, 0.16, 0.17, 0.19, 0.20, 0.21, 0.21])
-static_16 = np.array([0.21, 0.13, 0.14, 0.15, 0.16])  # run stopped at 491M
+# Dose sequence: darker = longer handicap (ordinal, colourblind-safe Blues ramp).
+DOSE = [  # (ramp_end step, tokens at ramp end, trajectory over tok_h, colour)
+    (3000,   98, [0.44, 0.25, 0.24, 0.24, 0.26, 0.28, 0.30, 0.32, 0.33, 0.33], "#9ECAE1"),
+    (6000,  197, [0.44, 0.18, 0.16, 0.17, 0.19, 0.21, 0.22, 0.24, 0.25, 0.26], "#6BAED6"),
+    (9000,  295, [0.42, 0.24, 0.15, 0.14, 0.15, 0.17, 0.18, 0.20, 0.21, 0.21], "#3182BD"),
+    (15000, 491, [0.36, 0.24, 0.19, 0.16, 0.14, 0.15, 0.16, 0.18, 0.19, 0.19], "#08519C"),
+]
 
-fig, ax = plt.subplots(figsize=(5.6, 3.4))
-style(ax)
-ax.axhline(0.5, color=MUTED, ls=":", lw=1, zorder=1)
-ax.annotate("balanced (0.5)", (105, 0.515), color=MUTED, fontsize=8)
-ax.axvspan(60, 295, color=GRID, alpha=0.45, zorder=0, lw=0)
-ax.annotate("shared LR ramped\n$\\times$0.1 $\\rightarrow$ $\\times$1.0", (175, 0.86), color=MUTED,
-            fontsize=8, ha="center")
-ax.plot(tok_h, base_16, color=BLUE, lw=2, marker="o", ms=5, zorder=3)
-ax.plot(tok_h, ramp_16, color=VERM, lw=2, marker="D", ms=5, zorder=3)
-ax.plot(tok_h[:5], static_16, color=GREEN, lw=2, ls="--", marker="s", ms=5, zorder=3)
-for lab, c, x, y, off in [("baseline $\\times$1.0", BLUE, tok_h[-1], base_16[-1], (7, 0)),
-                          ("ramp 0.1$\\rightarrow$1.0", VERM, tok_h[-1], ramp_16[-1], (7, 0)),
-                          ("static $\\times$0.1", GREEN, tok_h[2], static_16[2], (-2, -16))]:
-    ax.annotate(lab, (x, y), xytext=off, textcoords="offset points",
-                color=c, va="center", fontsize=9, fontweight="bold")
-ax.set_xlabel("training tokens (millions)")
-ax.set_ylabel("shared branch share of ablation impact")
-ax.set_title("The reallocation does not undo (16 layers, 251M)")
-ax.set_xlim(60, 1180)
-ax.set_ylim(0.03, 0.95)
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.4, 3.2))
+style(a1)
+style(a2)
+
+# panel (a): trajectories — the reallocation survives the handicap being lifted
+a1.axhline(0.5, color=MUTED, ls=":", lw=1, zorder=1)
+a1.annotate("balanced (0.5)", (105, 0.515), color=MUTED, fontsize=8)
+a1.plot(tok_h, base_16, color=VERM, lw=2, marker="o", ms=4, zorder=4)
+a1.annotate("no handicap", (tok_h[-1], base_16[-1]), xytext=(-4, 9), textcoords="offset points",
+            color=VERM, ha="right", fontsize=8, fontweight="bold")
+for _, tk, traj, c in DOSE:
+    a1.plot(tok_h, traj, color=c, lw=1.8, marker="D", ms=3.5, zorder=3,
+            label=f"{tk}M")
+    a1.plot([tk], [traj[[98, 197, 295, 491].index(tk)]], marker="|", ms=13, mew=2.2,
+            color=c, zorder=5)
+leg = a1.legend(loc="center right", frameon=False, fontsize=7.5, ncol=2,
+                title="handicap held for", handlelength=1.4, columnspacing=1.0,
+                handletextpad=0.4, labelspacing=0.3)
+leg.get_title().set_fontsize(7.5)
+leg.get_title().set_color(MUTED)
+a1.set_xlabel("training tokens (millions)")
+a1.set_ylabel("shared branch share")
+a1.set_title("Longer handicap, lower final share")
+a1.set_xlim(60, 1010)
+a1.set_ylim(0.05, 0.92)
+
+# panel (b): the dose-response itself — final share vs how long the handicap lasted
+xs = [0] + [tk for _, tk, _, _ in DOSE]
+ys = [base_16[-1]] + [traj[-1] for _, _, traj, _ in DOSE]
+a2.plot(xs, ys, color=MUTED, lw=1.5, ls="-", zorder=2)
+a2.scatter([0], [base_16[-1]], s=55, color=VERM, zorder=4, edgecolor="white", linewidth=0.8)
+for (_, tk, traj, c) in DOSE:
+    a2.scatter([tk], [traj[-1]], s=55, color=c, zorder=4, edgecolor="white", linewidth=0.8)
+for x, y in zip(xs, ys):
+    a2.annotate(f"{y:.2f}", (x, y), xytext=(0, 8), textcoords="offset points",
+                ha="center", fontsize=8.5)
+a2.annotate("no handicap", (0, ys[0]), xytext=(6, -12), textcoords="offset points",
+            color=VERM, fontsize=8, fontweight="bold")
+a2.annotate("saturates", (395, 0.155), color=MUTED, fontsize=8, ha="center")
+a2.set_xlabel("handicap duration (M tokens)")
+a2.set_ylabel("shared share at 983M tokens")
+a2.set_title("Dose-response, at flat perplexity")
+a2.set_xlim(-45, 570)
+a2.set_ylim(0.10, 0.70)
 save(fig, "fig6_hysteresis")
 
 print("all figures written to", HERE)

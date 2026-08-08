@@ -358,8 +358,39 @@ It also removes Finding 8's / the paper's caveat that the 16-layer model cannot 
 routed balance within 1B tokens: left alone it cannot, but it can be driven well past balance and
 kept there.
 
-**Caveat: single seed, single ramp endpoint, single depth.** A dose–response over the ramp
-endpoint is the obvious next control; this establishes existence, not a law.
+**Seed replication.** Pooling a second seed into the ramp_end=9000 point above changes nothing:
+minimum share 0.14, 0.21 at 983M, identical to the single seed, with ±0.01–0.10 PPL spread on the
+ablation deltas. The single-seed caveat originally attached to this finding is retired.
+
+### Dose-response over the handicap duration
+
+Varying only `--shared-ramp-end` (16 layers, mult ×0.1, 983M tokens, seed 0 except where noted):
+
+| handicap held for | 0 (baseline) | 98M | 197M | 295M | 491M |
+|---|---|---|---|---|---|
+| min share | 0.54 | 0.24 | 0.16 | 0.14 | 0.14 |
+| **share @983M** | **0.59** | **0.33** | **0.26** | **0.21** | **0.19** |
+| final PPL | 2.90 | 2.88 | 2.88 | 2.88 | 2.89 |
+| seeds | 1 | 1 | 1 | 2 | 1 |
+
+Three readings:
+
+1. **The effect is graded in the duration**, monotonically — 0.33 → 0.26 → 0.21 → 0.19. The
+   hysteresis is a dose-response, not an all-or-nothing switch. Combined with Finding 9's
+   dose-response over handicap *strength*, the race has two independent, monotone control axes.
+2. **A brief handicap already does most of the work.** Lifting it at 98M tokens — one tenth of
+   the budget — still lands at 0.33 against the baseline's 0.59: roughly two thirds of the total
+   achievable reallocation, bought in the first tenth of training.
+3. **The curve saturates.** The 295M → 491M gap is 0.02, equal to the seed noise measured on this
+   quantity elsewhere in the study; **those two points are not distinguishable**. Past ~295M
+   tokens, extending the handicap buys nothing measurable.
+
+Perplexity is flat across the entire series (2.88–2.89) and slightly better than the baseline's
+2.90 throughout — consistent with Finding 9.
+
+**Remaining caveats.** The 98M / 197M / 491M points are single-seed (only 295M is replicated); all
+are at one depth and one handicap strength. Full per-checkpoint tables in
+`docs/branch-split-runs.md`.
 
 ## Limitations
 
