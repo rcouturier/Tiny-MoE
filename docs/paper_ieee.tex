@@ -29,10 +29,10 @@ handicap applied over only the first tenth of training is enough to make that re
 permanent. Where the branches finally settle is governed not by the number of experts but by how
 much active width each branch applies to a token, which at fixed routing reduces to the ratio of
 their widths and orders eleven configurations spanning eightfold in ratio and eightfold in expert
-count. Across that entire range held-out perplexity varies by less than 0.1, so the placement of
-feed-forward computation is close to a free design choice; the one lever that must be paid for is
-routing granularity, which is also the strongest, swinging the split from 0.97 to 0.17 between
-top-1 and top-4 at identical widths.
+count. Among the configurations of comparable size, held-out perplexity varies by less than 0.1
+across that whole range, so the placement of feed-forward computation is close to a free design
+choice; the one lever that must be paid for is routing granularity, which is also the strongest,
+swinging the split from 0.97 to 0.17 between top-1 and top-4 at identical widths.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -70,8 +70,9 @@ granularity of the routing moves it further still, from 0.97 to 0.17 between top
 is the one lever among these that has to be paid for.
 
 Taken together these results reframe the shared/routed split as a largely free design choice.
-Held-out perplexity varies by less than 0.1 across width configurations whose branch split spans
-0.25 to 0.81, so a practitioner may place the computation more or less where they wish. That
+Among configurations of comparable size, held-out perplexity varies by less than 0.1 while the
+branch split spans 0.25 to 0.81, so a practitioner may place the computation more or less where
+they wish. That
 freedom matters whenever the routed experts are themselves the object of interest, as they are in
 interpretability work, expert pruning, and modular editing, and it means that a diagnosis of
 expert redundancy drawn from an undertrained checkpoint is not merely imprecise but misleading.
@@ -84,8 +85,8 @@ specialization, whereas the learning-rate control does not reliably move it at a
 Conditional computation through a sparsely gated MoE layer was introduced by Shazeer et
 al.~\cite{shazeer2017outrageously} and scaled by GShard~\cite{lepikhin2021gshard} and Switch
 Transformer~\cite{fedus2022switch}, the latter establishing the auxiliary load-balancing loss that
-we also use; ST-MoE~\cite{zoph2022stmoe} added the router $z$-loss for stability. Our backbone is a
-top-2 configuration in the style of Mixtral~\cite{jiang2024mixtral}.
+we also use; ST-MoE~\cite{zoph2022stmoe} added the router $z$-loss for stability. Our reference configuration is top-2, in the style of Mixtral~\cite{jiang2024mixtral}, and
+Section~\ref{sec:topk} varies that choice.
 
 The always-on shared expert originates with DeepSeekMoE~\cite{dai2024deepseekmoe} and carries
 through DeepSeek-V2 and V3~\cite{deepseekv2,deepseekv3}, motivated by the argument that isolating
@@ -381,7 +382,7 @@ $I = I_{\mathrm{shared}} = 1024$, so the width ratio is 1.0 throughout, and vary
 \begin{table}[t]
 \centering
 \caption{Routing granularity at fixed widths ($E{=}8$, $I{=}I_{\mathrm{shared}}{=}1024$, ratio 1.0),
-two seeds each.}
+two seeds each. The split is the minimum over the trajectory; perplexity and NMI are at 983M tokens.}
 \label{tab:topk}
 \begin{tabular}{lrrr}
 \toprule
@@ -398,6 +399,16 @@ Table~\ref{tab:topk} shows that $k$ enters, and that it is the strongest single 
 study: moving from top-1 to top-4 at identical widths swings the split from 0.97 to 0.17, further
 than the 0.53 obtained by quadrupling the shared expert's width. The width-ratio result of the
 preceding subsections must therefore be read as holding at fixed routing, which is how we state it.
+
+This also refines, rather than simply refutes, the $E/k$ prediction of Section~\ref{sec:mech}. That
+prediction fails on the $E$ axis, as the preceding subsection showed: at a fixed width ratio,
+varying $E$ from 4 to 32 leaves the split within the single band 0.47--0.56 and not even in a
+consistent direction, so per-expert gradient share cannot be what governs the resting point. It
+succeeds on the $k$ axis, and in the predicted
+direction, since raising $k$ lowers the shared share. The asymmetry is informative. What fails is
+the \emph{ratio} $k/E$; what survives is $k$ alone, which is also the quantity that sets how much
+routed width a token actually traverses. That points to active width and routing granularity as
+the operative variables rather than to gradient exposure per expert.
 
 Unlike the width ratio, this lever is not free. Top-1 costs 0.13 in perplexity and top-4 doubles
 the routed floating-point cost per token, whereas the width manipulations moved the split across
@@ -449,6 +460,11 @@ The width lever delivers. Holding $E=8$ and $I=1024$ so that the routed branch i
 runs and varying only $I_{\mathrm{shared}}$, domain NMI at 983M tokens rises from 0.0103 to 0.0174
 to 0.0226 as the shared share falls from 0.82 to 0.50 to 0.34. That is a factor of 2.2 in
 specialization obtained without touching the routed experts at all, and without cost in perplexity.
+Because NMI is measured at 983M tokens, the splits quoted here are the values at that point rather
+than the trajectory minima of Table~\ref{tab:contrast}, which is why the same three runs appear
+with slightly different splits in the two places. The granularity runs of
+Section~\ref{sec:topk} point the same way, their routed NMI rising from 0.0003 at top-1 to 0.0235
+at top-4 as the routed branch takes over.
 
 The learning-rate lever does not, or not reliably. At 16 layers, measured at 491M tokens where the
 baseline remains shared-dominated, slowing the shared expert raises NMI monotonically from 0.0108
