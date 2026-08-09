@@ -385,6 +385,67 @@ the tables above are the pooled two-seed analyses. Adding seed 1 moved the minim
 noise measured on `e8i256` / `e8i2048`, and it widens the shared-width contrast slightly rather
 than narrowing it.
 
+## Routing granularity (`topk.log`, 2026-08-09)
+
+8 layers, E=8, `I = I_shared = 1024` (width ratio 1.0) throughout; only `--top-k` varies.
+`k=2` is the published `base1b`. 2 seeds each.
+
+| `k` | min share | @983M | final PPL | routed NMI @983M | params |
+|---|---|---|---|---|---|
+| 1 | **0.97** | 0.97 | 3.13 | 0.0003 | 133.7M |
+| 2 (`base1b`) | 0.47 | 0.50 | 3.00 | ~0.017 | 133.7M |
+| 4 | **0.17** | 0.19 | 2.99 | 0.0235 | 133.7M |
+
+Parameter count is identical across the three; only the number of experts activated per token
+changes. This is the largest single effect measured anywhere in the study.
+
+### `k1r1` — E=8, k=1, I=I_shared=1024, 2 seeds
+
+```
+     0 |   10.41 |   +0.49±0.02 |   -0.00±0.00 |     0.0017 |          1.00
+  3000 |    4.23 |   +6.66±0.04 |   +0.12±0.00 |     0.0053 |          0.98
+  6000 |    3.72 |   +7.79±0.08 |   +0.15±0.01 |     0.0070 |          0.98
+  9000 |    3.53 |   +8.04±0.06 |   +0.16±0.00 |     0.0040 |          0.98
+ 12000 |    3.41 |   +8.44±0.01 |   +0.17±0.00 |     0.0047 |          0.98
+ 15000 |    3.33 |   +8.51±0.27 |   +0.20±0.01 |     0.0035 |          0.98
+ 18000 |    3.26 |   +8.70±0.23 |   +0.22±0.00 |     0.0028 |          0.98
+ 21000 |    3.20 |   +8.90±0.21 |   +0.25±0.00 |     0.0017 |          0.97
+ 24000 |    3.16 |   +8.84±0.21 |   +0.27±0.00 |     0.0007 |          0.97
+ 27000 |    3.14 |   +8.88±0.18 |   +0.29±0.00 |     0.0004 |          0.97
+ 30000 |    3.13 |   +8.89±0.17 |   +0.29±0.00 |     0.0003 |          0.97
+```
+
+Note the routed NMI *falling* over training (0.0070 → 0.0003): with top-1 the routed branch does
+not merely stay unimportant, it loses what little domain structure it had.
+
+### `k4r1` — E=8, k=4, I=I_shared=1024, 2 seeds
+
+```
+     0 |   10.41 |   +0.49±0.02 |   -0.00±0.00 |     0.0003 |          1.00
+  3000 |    4.17 |   +2.47±0.04 |   +1.31±0.09 |     0.0134 |          0.65
+  6000 |    3.64 |   +1.35±0.05 |   +2.66±0.02 |     0.0176 |          0.34
+  9000 |    3.41 |   +0.99±0.02 |   +3.30±0.08 |     0.0199 |          0.23
+ 12000 |    3.28 |   +0.88±0.01 |   +3.79±0.01 |     0.0211 |          0.19
+ 15000 |    3.19 |   +0.82±0.00 |   +3.87±0.08 |     0.0220 |          0.18
+ 18000 |    3.12 |   +0.82±0.00 |   +3.89±0.10 |     0.0232 |          0.17
+ 21000 |    3.06 |   +0.87±0.01 |   +3.95±0.09 |     0.0238 |          0.18
+ 24000 |    3.02 |   +0.91±0.02 |   +3.94±0.06 |     0.0237 |          0.19
+ 27000 |    3.00 |   +0.94±0.01 |   +3.94±0.08 |     0.0234 |          0.19
+ 30000 |    2.99 |   +0.95±0.01 |   +3.95±0.08 |     0.0235 |          0.19
+```
+
+### Why the "active width fraction" does not rescue a single scalar
+
+`x = I_shared/(I_shared + k·I)` folds `k` in and orders the `k≥2` data:
+
+| `x` | 0.20 | 0.333 | 0.50 | 0.667 |
+|---|---|---|---|---|
+| observed min share | 0.17 / 0.25 / 0.28 / 0.37 | 0.47 / 0.53 / 0.55 / 0.56 | 0.63 | 0.72 / 0.79 / 0.81 |
+
+but `e16cap` (E=16, k=2, I=512) and `k1r1` (E=8, k=1, I=1024) both sit at `x = 0.50` and split
+0.63 against 0.97. Top-1 is outside the family. Two runs at matched `k·I = 2048` (`k4i512_s0`,
+`k1i2048_s0`; `run_topk2.sh`, `gran.log`) are running to separate granularity from active width.
+
 ## Reproduction
 
 ```bash

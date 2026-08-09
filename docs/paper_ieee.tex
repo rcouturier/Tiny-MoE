@@ -26,11 +26,13 @@ and we trace it to a gradient-exposure race in which the shared expert, updated 
 out-competes routed experts updated on a $k/E$ fraction of them. The race is causally
 controllable: slowing the shared expert reallocates computation to the routed branch, and a
 handicap applied over only the first tenth of training is enough to make that reallocation
-permanent. Where the branches finally settle is governed not by the number of experts but by the
-ratio of their widths, which orders eleven configurations spanning eightfold in ratio and
-eightfold in expert count. Across that entire range held-out perplexity varies by less than 0.1,
-so the placement of feed-forward computation in a small Mixture-of-Experts model is close to a
-free design choice.
+permanent. Where the branches finally settle is governed not by the number of experts but by how
+much active width each branch applies to a token, which at fixed routing reduces to the ratio of
+their widths and orders eleven configurations spanning eightfold in ratio and eightfold in expert
+count. Across that entire range held-out perplexity varies by less than 0.1, so the placement of
+feed-forward computation is close to a free design choice; the one lever that must be paid for is
+routing granularity, which is also the strongest, swinging the split from 0.97 to 0.17 between
+top-1 and top-4 at identical widths.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -305,8 +307,9 @@ report the shape of the dependence rather than a functional law.
 The mechanism explains why the shared expert leads and shows that the lead can be reversed. It does
 not say where the split comes to rest, and the natural prediction from the gradient-exposure
 argument, that the resting point should follow $E/k$, turns out to be wrong. Across eleven 8-layer
-configurations trained to 983M tokens, expert count is nearly irrelevant and the ratio of the two
-branches' widths orders every run.
+configurations trained to 983M tokens, all at top-2 routing, expert count is nearly irrelevant and
+the ratio of the two branches' widths orders every run. Section~\ref{sec:topk} then asks what
+happens when the routing itself is changed.
 
 \begin{table}[t]
 \centering
@@ -361,11 +364,61 @@ across $E\in\{4,8,16,32\}$ at 2.99, 3.00, 3.00 and 3.02, while the share continu
 ratio that the same manipulation necessarily varies. Expert count is close to a free parameter for
 both quantities in this regime.
 
-The two results compose rather than compete. The gradient race decides which branch arrives first;
-the relative width of the branches decides how much computation each can absorb, and therefore
-where the allocation settles once the race is over. Both are reparametrizations rather than levers
-on quality: across the seven configurations between 127M and 234M parameters the minimum shared
-share spans 0.25 to 0.81 while final perplexity spans only 2.95 to 3.02.
+\subsection{Does routing granularity enter?}
+\label{sec:topk}
+
+Every configuration above uses top-2 routing, so the ordering just established is, strictly, an
+ordering at fixed $k$. Because a token passes through $k$ routed experts but only one shared
+expert, $k$ has an obvious claim to matter, and we test it directly by holding the widths at
+$I = I_{\mathrm{shared}} = 1024$, so the width ratio is 1.0 throughout, and varying only $k$.
+
+\begin{table}[t]
+\centering
+\caption{Routing granularity at fixed widths ($E{=}8$, $I{=}I_{\mathrm{shared}}{=}1024$, ratio 1.0),
+two seeds each.}
+\label{tab:topk}
+\begin{tabular}{lrrr}
+\toprule
+$k$ & 1 & 2 & 4 \\
+\midrule
+$s_{\min}$              & 0.97 & 0.47 & 0.17 \\
+final PPL               & 3.13 & 3.00 & 2.99 \\
+routed domain NMI       & 0.0003 & 0.017 & 0.0235 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:topk} shows that $k$ enters, and that it is the strongest single lever in this
+study: moving from top-1 to top-4 at identical widths swings the split from 0.97 to 0.17, further
+than the 0.53 obtained by quadrupling the shared expert's width. The width-ratio result of the
+preceding subsections must therefore be read as holding at fixed routing, which is how we state it.
+
+Unlike the width ratio, this lever is not free. Top-1 costs 0.13 in perplexity and top-4 doubles
+the routed floating-point cost per token, whereas the width manipulations moved the split across
+0.25 to 0.81 within a 0.07 band of perplexity. Granularity buys reallocation; it does not buy it
+for nothing.
+
+A natural repair is to replace the ratio with the fraction of \emph{active} feed-forward width the
+shared branch represents, $x = I_{\mathrm{shared}}/(I_{\mathrm{shared}} + kI)$, which folds $k$ in
+by construction. It does organize the $k\geq2$ data: $x$ of 0.20, 0.33, 0.50 and 0.67 correspond to
+observed splits of 0.17--0.37, 0.47--0.56, 0.63 and 0.72--0.81. It fails at $k=1$, and
+instructively. The $E{=}16$, $k{=}2$, $I{=}512$ configuration and the $k{=}1$ run here share
+$x = 0.50$ exactly, yet split 0.63 against 0.97. No single scalar of this form accounts for both.
+
+The failure is not mysterious. Top-1 routing removes the router's ability to blend two experts, and
+the routed branch never becomes a useful object at all: ablating it entirely costs 0.29 perplexity,
+and its domain NMI not only stays near zero but \emph{declines} over training, from 0.0053 to
+0.0003. Top-1 is a qualitatively different regime rather than an extreme point of the same one,
+which is consistent with the difficulty reported for single-expert routing in the literature
+\cite{fedus2022switch}. We therefore restrict the claim: for $k\geq2$ the split is ordered by how
+much active width each branch applies, and top-1 should be treated separately.
+
+The results of this section compose rather than compete. The gradient race decides which branch
+arrives first; the relative active width of the branches decides how much computation each can
+absorb, and therefore where the allocation settles once the race is over. The width manipulations
+are reparametrizations rather than levers on quality: across the seven configurations between 127M
+and 234M parameters the minimum shared share spans 0.25 to 0.81 while final perplexity spans only
+2.95 to 3.02. Granularity is the exception, and the one lever here that must be paid for.
 
 \section{Does Reallocation Buy Specialization?}
 \label{sec:spec}
@@ -450,8 +503,9 @@ Routed experts in small Mixture-of-Experts models are not redundant. They are ou
 training by a shared expert that receives gradient from every token, and the outcome of that
 competition is settled by two hyperparameters rather than by the demands of the data. Slowing the
 shared expert reverses the result, permanently, even when applied only over the first tenth of
-training; the relative width of the two branches then fixes where the split comes to rest, spanning
-shared shares from 0.25 to 0.81 while perplexity moves by less than 0.1. Where a small
+training; the relative active width of the two branches then fixes where the split comes to rest,
+spanning shared shares from 0.25 to 0.81 while perplexity moves by less than 0.1, and routing
+granularity moves it further still, though at a price the width levers do not charge. Where a small
 Mixture-of-Experts model puts its feed-forward computation is, to a good approximation, something
 the designer chooses rather than something the model discovers.
 

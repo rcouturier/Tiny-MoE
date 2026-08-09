@@ -443,6 +443,40 @@ interpretability.
 cross-E comparisons are excluded here; domain NMI is one specialization axis among several
 (Finding 3) and the surface-form axis is not analyzed in this comparison.
 
+## Finding 14 — Routing granularity `k` is the strongest lever, and the only one that isn't free
+
+Finding 11 established the width ratio at **top-2 throughout**, so it is strictly an ordering at
+fixed routing. Test: hold `I = I_shared = 1024` (ratio 1.0) and E=8, vary only `--top-k`.
+8 layers, 983M tokens, 2 seeds each; `k=2` is the published `base1b`.
+
+| `k` | 1 | 2 | 4 |
+|---|---|---|---|
+| min shared share | **0.97** | 0.47 | **0.17** |
+| share @983M | 0.97 | 0.50 | 0.19 |
+| final PPL | 3.13 | 3.00 | 2.99 |
+| routed domain NMI | 0.0003 | ~0.017 | 0.0235 |
+| Δrm routed @983M | +0.29 | +2.48 | +3.95 |
+
+1. **`k` enters, and dominates.** At identical widths, top-1 → top-4 swings the split 0.97 → 0.17
+   — further than the 0.53 obtained by quadrupling `I_shared`. Finding 11 must be stated as
+   holding *at fixed routing*.
+2. **This lever is not free**, unlike every other one in this study. Top-1 costs 0.13 PPL; top-4
+   doubles routed FLOPs per token. The width manipulations moved the split across 0.25–0.81 inside
+   a 0.07 PPL band.
+3. **The "active width fraction" repair fails.** `x = I_shared/(I_shared + k·I)` folds `k` in and
+   does organize the `k≥2` data (x = 0.20 / 0.33 / 0.50 / 0.67 → splits 0.17–0.37 / 0.47–0.56 /
+   0.63 / 0.72–0.81). But `e16cap` (E=16, k=2, I=512) and this `k=1` run have **identical x =
+   0.50** and split 0.63 vs 0.97. No scalar of this form covers both.
+4. **Top-1 is a degenerate regime, not an extreme point.** The router cannot blend two experts;
+   ablating the whole routed branch costs +0.29 PPL, and routed domain NMI stays near zero while
+   *declining* over training (0.0053 → 0.0003). Consistent with Finding 6's early top-1 note and
+   with the known difficulty of single-expert routing.
+
+**Net.** For `k≥2`, the split is ordered by how much *active* width each branch applies. Top-1
+should be treated separately. Two follow-up runs at matched active width (`k=4,I=512` and
+`k=1,I=2048`, both `k·I=2048`, `x=0.333` like `base1b`) are running to separate granularity from
+active width — `run_topk2.sh`, log `gran.log`.
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
