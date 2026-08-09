@@ -203,8 +203,8 @@ a1.annotate("no handicap", (tok_h[-1], base_16[-1]), xytext=(-4, 9), textcoords=
 for _, tk, traj, c in DOSE:
     a1.plot(tok_h, traj, color=c, lw=1.8, marker="D", ms=3.5, zorder=3,
             label=f"{tk}M")
-    a1.plot([tk], [traj[[98, 197, 295, 491].index(tk)]], marker="|", ms=13, mew=2.2,
-            color=c, zorder=5)
+    a1.plot([tk], [traj[[98, 197, 295, 491].index(tk)]], marker="|", ms=18, mew=3.2,
+            color=c, zorder=6)
 leg = a1.legend(loc="center right", frameon=False, fontsize=7.5, ncol=2,
                 title="handicap held for", handlelength=1.4, columnspacing=1.0,
                 handletextpad=0.4, labelspacing=0.3)

@@ -472,10 +472,35 @@ fixed routing. Test: hold `I = I_shared = 1024` (ratio 1.0) and E=8, vary only `
    *declining* over training (0.0053 → 0.0003). Consistent with Finding 6's early top-1 note and
    with the known difficulty of single-expert routing.
 
-**Net.** For `k≥2`, the split is ordered by how much *active* width each branch applies. Top-1
-should be treated separately. Two follow-up runs at matched active width (`k=4,I=512` and
-`k=1,I=2048`, both `k·I=2048`, `x=0.333` like `base1b`) are running to separate granularity from
-active width — `run_topk2.sh`, log `gran.log`.
+**Net (superseded the same day — see below).** For `k≥2`, the split is ordered by how much
+*active* width each branch applies. Top-1 should be treated separately.
+
+### The matched-active-width runs refute the active-width scalar too (`gran.log`, 2026-08-09)
+
+Both runs hold `k·I = 2048` and `I_shared = 1024` — the same active widths and the same
+`x = 0.333` as `base1b` (0.47) — and change only how the routed width is delivered. 1 seed each.
+
+| | `k=4, I=512` | `base1b` (k=2, I=1024) | `k=1, I=2048` |
+|---|---|---|---|
+| min share | **0.29** | 0.47 | **0.95** |
+| share @983M | 0.32 | 0.50 | 0.95 |
+| final PPL | 3.06 | 3.00 | 3.11 |
+| routed NMI @983M | **0.0301** | ~0.017 | 0.0003 |
+| params | ~96M | 133.7M | ~230M |
+
+1. **Granularity acts beyond active width.** At identical `x`, four experts of 512 land at 0.29 —
+   outside the ratio-1.0 band, 0.18 below `base1b`, 9× the seed noise. The active-width scalar is
+   refuted even for `k≥2`; it only *appeared* to organize the k≥2 data because k was 2 everywhere.
+2. **Top-1's collapse is not a width effect.** One expert of 2048 — double `base1b`'s per-token
+   routed width — still gives 0.95. It is the inability to mix experts that kills the routed
+   branch, not missing capacity.
+3. **`k4i512` sets the study-wide NMI record** (0.0301): the same active width delivered as more,
+   narrower experts is also the most domain-specialized configuration measured anywhere.
+
+**Final statement (what the paper says).** No single scalar tested — width ratio or active-width
+fraction — subsumes width and routing at once. Jointly: at fixed granularity the width proportion
+orders every configuration; at fixed active width, finer granularity lowers the shared share
+further; top-1 never engages the routed branch at any width.
 
 ## Limitations
 
