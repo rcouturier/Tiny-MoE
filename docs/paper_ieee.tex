@@ -534,11 +534,13 @@ the designer chooses rather than something the model discovers.
 
 \section*{Reproducibility}
 
-The model, training code and analysis toolkit, including branch ablation, routing capture and the
-trajectory drivers, are released with this paper; every experiment runs on a single GPU. Two
-implementation defects found and fixed during the study, a missing causal mask in the absorbed
-attention inference path and a broken CUDA reduction in the load-balancing loss, are documented in
-the version history.
+The model, the training code and the analysis toolkit, including whole-branch ablation, routing
+capture and the trajectory drivers, will be released publicly upon acceptance, together with the
+run configurations and the per-checkpoint measurements behind every table and figure here. Every
+experiment in this paper runs on a single GPU. Two implementation defects found and fixed during
+the study, a missing causal mask in the absorbed attention inference path and a broken CUDA
+reduction in the load-balancing loss, are recorded in the version history that will accompany that
+release.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
