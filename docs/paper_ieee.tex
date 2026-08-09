@@ -62,18 +62,22 @@ apparent redundancy is transient, disappearing once the model has seen a few hun
 tokens. Its cause is a race for gradient signal that the shared expert wins by construction, and
 that a single learning-rate multiplier settles in either direction at no cost in perplexity.
 Applying that multiplier over the first tenth of training suffices; once the race is decided, the
-allocation persists after the handicap is removed. Finally, where the two branches come to rest is
-set by the ratio between their widths, and not, as the mechanism naively suggests, by the number
-of routed experts. Holding the routed branch identical down to its parameter shapes and varying
-only the shared expert's width moves the shared branch's share of ablation impact from 0.28 to
-0.81.
+allocation persists after the handicap is removed. Where the two branches finally come to rest is
+set by their relative width, and not, as the mechanism naively suggests, by the number of routed
+experts: holding the routed branch identical down to its parameter shapes and varying only the
+shared expert's width moves the shared branch's share of ablation impact from 0.28 to 0.81. The
+granularity of the routing moves it further still, from 0.97 to 0.17 between top-1 and top-4, and
+is the one lever among these that has to be paid for.
 
-Taken together these results reframe the shared/routed split as a near-neutral reparametrization.
-Held-out perplexity varies by less than 0.1 across configurations whose branch split spans 0.25 to
-0.81, which means a practitioner may place the computation more or less where they wish. That
+Taken together these results reframe the shared/routed split as a largely free design choice.
+Held-out perplexity varies by less than 0.1 across width configurations whose branch split spans
+0.25 to 0.81, so a practitioner may place the computation more or less where they wish. That
 freedom matters whenever the routed experts are themselves the object of interest, as they are in
 interpretability work, expert pruning, and modular editing, and it means that a diagnosis of
 expert redundancy drawn from an undertrained checkpoint is not merely imprecise but misleading.
+Whether experts so engaged also become better objects of study turns out to depend on which lever
+is used: widening the routed branch relative to the shared one more than doubles their domain
+specialization, whereas the learning-rate control does not reliably move it at all.
 
 \section{Related Work}
 
@@ -121,9 +125,11 @@ the two measurements by the shared branch's share of total ablation impact,
 s = \frac{\Delta_{\text{shared}}}{\Delta_{\text{shared}} + \Delta_{\text{routed}}},
 \end{equation}
 so that $s=0.5$ denotes branches of equal importance and $s\rightarrow1$ a shared-dominated model.
-Every trajectory we measured dips to a minimum and then rises slowly, so we report both the
-minimum reached and the value at 983M tokens. Seed-to-seed variation on $s$ is approximately 0.02,
-an order of magnitude below the effects discussed below.
+Almost every trajectory we measured dips to a minimum and then rises slowly, the sole exception
+being the top-1 configuration of Section~\ref{sec:topk}, which declines monotonically and never
+leaves shared dominance; we therefore report both the minimum reached and the value at 983M
+tokens. Seed-to-seed variation on $s$ is approximately 0.02, an order of magnitude below the
+effects discussed below.
 
 \section{Branch Importance Is a Function of Training Tokens}
 \label{sec:obs}
@@ -272,8 +278,8 @@ rate. Fig.~\ref{fig:dose} shows the outcome for four ramp endpoints.
 \includegraphics[width=0.86\textwidth]{fig6_hysteresis.pdf}
 \caption{Left: shared branch share against training tokens at 16 layers, for four handicap
 durations; the tick marks the point at which each handicap was lifted. Right: the resulting
-dose-response, final share against how long the handicap was held. Perplexity is flat across the
-whole series.}
+dose-response, final share against how long the handicap was held, with the never-released limit
+as a dashed reference. Every ramped condition ends within 0.01 perplexity of the others.}
 \label{fig:dose}
 \end{figure*}
 
@@ -297,11 +303,11 @@ thus a schedule intervention rather than a standing tax on the shared expert, wh
 race-then-commit dynamic predicts, since what wins the early race is what the residual stream
 subsequently builds upon.
 
-We replicated the 295M endpoint with a second seed and obtained identical values. The remaining
-three endpoints are single-seed, and the sweep covers one depth and one handicap strength, so we
-report the shape of the dependence rather than a functional law.
+We replicated the 295M endpoint with a second seed and obtained identical values. The other four
+conditions are single-seed, and the sweep covers one depth and one handicap strength, so we report
+the shape of the dependence rather than a functional law.
 
-\section{The Width Ratio Sets Where the Split Lands}
+\section{What Sets Where the Split Lands}
 \label{sec:ratio}
 
 The mechanism explains why the shared expert leads and shows that the lead can be reversed. It does
@@ -383,7 +389,7 @@ $k$ & 1 & 2 & 4 \\
 \midrule
 $s_{\min}$              & 0.97 & 0.47 & 0.17 \\
 final PPL               & 3.13 & 3.00 & 2.99 \\
-routed domain NMI       & 0.0003 & 0.017 & 0.0235 \\
+routed domain NMI       & 0.0003 & 0.0174 & 0.0235 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -467,7 +473,8 @@ grows mechanically with the number of experts.
 The picture that emerges is that a small MoE's division of feed-forward labour is only weakly
 determined by the task. Two quantities that a practitioner sets freely, the relative learning rate
 of the two branches and their relative width, move the split across almost its entire attainable
-range while leaving held-out perplexity within 0.1. The shared expert is not doing something the
+range while leaving held-out perplexity within 0.1, and a third, the granularity of the routing,
+moves it further at a cost the first two do not carry. The shared expert is not doing something the
 routed experts could not do; it is doing what it got to first, and it keeps as much of the work as
 its width allows.
 
@@ -491,7 +498,7 @@ production scale is untested and is the obvious next question. The width-ratio r
 an ordering over an eightfold range at one depth, not a functional form, and we deliberately do not
 fit one. The dose-response over handicap duration is replicated at a single endpoint, and its
 remaining points rest on one seed each; the effect sizes there exceed the measured seed noise by a
-comfortable margin, but the shape of the saturation deserves a denser sweep. Finally, our evidence
+comfortable margin, but the shape of the flattening deserves a denser sweep. Finally, our evidence
 is perplexity, ablation impact and routing statistics. At this scale standard reasoning and
 question-answering benchmarks sit at or near chance, so we cannot say whether a reallocated split
 changes downstream behaviour; that is the measurement a practitioner would ultimately want, and
