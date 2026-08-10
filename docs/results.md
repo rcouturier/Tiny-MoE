@@ -440,8 +440,25 @@ rate.** The learning-rate knob buys engagement early and reliably; it does not r
 interpretability.
 
 **Caveats.** Single seed on the 16-layer LR runs; NMI grows mechanically with E (Finding 6) so
-cross-E comparisons are excluded here; domain NMI is one specialization axis among several
-(Finding 3) and the surface-form axis is not analyzed in this comparison.
+cross-E comparisons are excluded here.
+
+### Multi-axis check (2026-08-10): the width-lever gain is not domain-only
+
+Surface-form / frequency / position NMI on the width trio at 983M (2 seeds each,
+`analysis.multi_axis`, in `meanablate.log`):
+
+| axis | sh4096 (s=0.82) | base1b (0.50) | sh512 (0.34) | gain |
+|---|---|---|---|---|
+| surface form | 0.1184 | 0.1407 | 0.1413 | +19%, saturating |
+| frequency | 0.0391 | 0.0510 | 0.0563 | +44%, monotone |
+| domain | 0.0103 | 0.0200 | 0.0226 | +119%, monotone |
+| position | 0.0007 | 0.0003 | 0.0003 | nil (control) |
+
+Every meaningful axis moves with routed engagement; none moves against. The gain is largest on
+domain, moderate on frequency, modest and saturating on surface form — which remains the dominant
+axis in absolute terms (0.14 ≫ 0.02), reproducing Finding 3's hierarchy. The "legibility" claim
+therefore does not rest on the domain axis alone, though its headline factor (2.2×) is
+domain-specific and must be quoted as such.
 
 ## Finding 14 — Routing granularity `k` is the strongest lever, and the only one that isn't free
 
