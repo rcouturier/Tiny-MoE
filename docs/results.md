@@ -502,6 +502,41 @@ fraction — subsumes width and routing at once. Jointly: at fixed granularity t
 orders every configuration; at fixed active width, finer granularity lowers the shared share
 further; top-1 never engages the routed branch at any width.
 
+## Finding 15 — The branch split is not a norm artifact: mean-ablation replicates, and norm dissociates from impact
+
+An external comment identified the study's sharpest methodological exposure: `s` is a ratio of
+**zero-ablation** ΔPPLs, and zeroing a branch in a residual stream perturbs the network by an
+amount that scales with the removed branch's output norm — which both headline levers (width, LR)
+modulate directly. Test: replace each ablated branch by its per-layer **mean output** over the
+eval stream instead of zeros (`analysis.meanablate`), and separately report the **norm share**
+`‖f_sh‖/(‖f_sh‖+‖routed‖)` — the quantity the objection says `s` secretly measures.
+
+Result over all nine key configurations (2–4 seeds each, final checkpoint):
+
+| config | `s_zero` | `s_mean` | norm share |
+|---|---|---|---|
+| LR ×0.1 (491M) | 0.10 | 0.11 | 0.323 |
+| k4 | 0.19 | 0.21 | 0.439 |
+| sh512 | 0.34 | 0.35 | 0.445 |
+| e8i2048 | 0.40 | 0.43 | 0.483 |
+| base1b | 0.50 | 0.54 | 0.513 |
+| LR ×0.3 (491M) | 0.52 | 0.55 | 0.453 |
+| e8i256 | 0.80 | 0.81 | 0.610 |
+| sh4096 | 0.82 | 0.86 | 0.670 |
+| k1 | 0.97 | 0.97 | 0.759 |
+
+1. **Mean-ablation replicates zero-ablation within 0.04 everywhere**, across a span of 0.10 → 0.97.
+   The ordering is identical; nothing about the paper's conclusions is measurement-dependent.
+2. **Norm share and ablation share dissociate, in both directions.** At k=1 the routed branch
+   carries 24% of the output norm but ~3% of the ablation impact (+0.29 vs +8.89): norm without
+   function. At LR ×0.1 the shared branch carries 32% of the norm but 10% of the impact. `s` is
+   therefore not a norm readout — a branch can have substantial norm and no useful computation.
+3. The norm share is monotone in `s` but far *less* extreme (0.32–0.76 vs 0.10–0.97): ablation
+   amplifies real functional differences, it does not manufacture them.
+
+Raw table in `meanablate.log`; the zero-vs-mean full trajectories of the width trio and the
+surface-form NMI runs are in the same log.
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
