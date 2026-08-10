@@ -491,6 +491,25 @@ Both at `k·I = 2048`, `I_shared = 1024`, hence `x = 0.333` — identical to `ba
  30000 |    3.11 |   +8.08±0.00 |   +0.42±0.00 |     0.0003 |          0.95
 ```
 
+## Baselines (`baselines.log`, 2026-08-10)
+
+Requested by an external comment: a dense FFN at the reference model's *active* width, and a
+no-shared model at the full budget. 8 layers, 983M tokens, 1 seed each.
+
+| run | config | params | PPL @983M |
+|---|---|---|---|
+| `dense3072` | E=1, k=1, I=3072, no shared, aux/z off (= dense FFN at active width) | 58.2M | **3.11** |
+| `base1b` (ref) | E=8, k=2, I=I_shared=1024 | 133.7M | **3.00** |
+| `noshared983` | E=8, k=2, I=1024, no shared | 121.1M | (running) |
+
+The active-width-matched dense trails the MoE by 0.11 PPL — more than the whole 0.07 band across
+the width configurations. The MoE's extra (inactive) parameters buy something real at this scale,
+so the placement question keeps its stakes. Note top-1 (`k1r1`, 3.13) lands *below* the dense
+baseline: it pays for routing without collecting its benefit.
+
+`dense3072` trajectory (`dense_peek.log`): PPL 4.30 / 3.51 / 3.30 / 3.17 / 3.11 at
+98M / 295M / 491M / 688M / 983M tokens.
+
 ## Reproduction
 
 ```bash
