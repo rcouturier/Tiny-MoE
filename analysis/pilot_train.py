@@ -60,6 +60,8 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--warmup", type=int, default=150)
     ap.add_argument("--no-shared", action="store_true", help="D1 variant: no shared expert")
+    ap.add_argument("--shared-scale", type=float, default=1.0,
+                    help="fixed (non-learned) scalar on the shared expert's output")
     ap.add_argument("--shared-dropout", type=float, default=0.0,
                     help="per-token dropout of the shared branch during training")
     ap.add_argument("--shared-lr-mult", type=float, default=1.0,
@@ -87,7 +89,7 @@ def main():
                          num_experts_per_token=args.top_k, moe_intermediate_size=args.moe_intermediate,
                          shared_intermediate_size=args.shared_intermediate,
                          max_seq_len=args.seq_len, use_shared_expert=not args.no_shared,
-                         shared_dropout=args.shared_dropout)
+                         shared_dropout=args.shared_dropout, shared_scale=args.shared_scale)
     model = Transformer(config).to(device)
     model.train()
     n_params = sum(p.numel() for p in model.parameters())

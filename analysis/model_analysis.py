@@ -24,6 +24,9 @@ class RoutingCapture:
     topk_weights: list = field(default_factory=list)   # each [N, K] float
     shared_norm: list = field(default_factory=list)    # each [N] float
     routed_norm: list = field(default_factory=list)    # each [N] float
+    shared_sum: list = field(default_factory=list)     # each [hidden] float (sum over tokens)
+    routed_sum: list = field(default_factory=list)     # each [hidden] float
+    ntok: list = field(default_factory=list)           # token counts, for the means
 
 
 class AnalysisMoE(nn.Module):
@@ -42,6 +45,7 @@ class AnalysisMoE(nn.Module):
         self.w13 = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.intermediate_size))
         self.w2 = nn.Parameter(torch.empty(self.num_experts, self.intermediate_size, self.hidden_size))
         self.shared_intermediate = getattr(config, "shared_intermediate_size", 0) or self.intermediate_size
+        self.shared_scale = getattr(config, "shared_scale", 1.0)
         if self.use_shared_expert:
             self.shared_w13 = nn.Linear(self.hidden_size, 2 * self.shared_intermediate, bias=False)
             self.shared_w2 = nn.Linear(self.shared_intermediate, self.hidden_size, bias=False)
@@ -49,7 +53,11 @@ class AnalysisMoE(nn.Module):
     @torch.inference_mode()
     def forward(self, x, ablate_experts: Optional[Iterable[int]] = None,
                 ablate_shared: bool = False, ablate_routed: bool = False,
-                capture: Optional[RoutingCapture] = None):
+                capture: Optional[RoutingCapture] = None,
+                shared_sub: Optional[torch.Tensor] = None,
+                routed_sub: Optional[torch.Tensor] = None):
+        # shared_sub / routed_sub: [hidden] vectors substituted for an ablated branch
+        # (mean-ablation) instead of zeros. Ignored unless that branch is ablated.
         bsz, seq_len, hidden = x.shape
         x_flat = x.reshape(-1, hidden)
         N = x_flat.shape[0]
@@ -60,11 +68,18 @@ class AnalysisMoE(nn.Module):
             g = self.shared_w13(x_flat)
             gs, us = g.chunk(2, dim=-1)
             shared_out = self.shared_w2(F.silu(gs) * us)
+            scale = getattr(self, "shared_scale", 1.0)
+            if scale != 1.0:
+                shared_out = shared_out * scale
+        elif ablate_shared and shared_sub is not None:
+            shared_out = shared_sub.to(x_flat.dtype).unsqueeze(0).expand(N, hidden)
         else:
             shared_out = x_flat.new_zeros((N, hidden))
 
         # whole routed branch removed (fair like-for-like vs shared-branch removal)
         if ablate_routed and capture is None:
+            if routed_sub is not None:
+                return (shared_out + routed_sub.to(x_flat.dtype).unsqueeze(0)).view(bsz, seq_len, hidden)
             return shared_out.view(bsz, seq_len, hidden)
 
         # router
@@ -103,6 +118,9 @@ class AnalysisMoE(nn.Module):
             capture.topk_weights.append(topk_weights.detach().to("cpu"))
             capture.shared_norm.append(shared_out.detach().float().norm(dim=-1).cpu())
             capture.routed_norm.append(routed_out.detach().float().norm(dim=-1).cpu())
+            capture.shared_sum.append(shared_out.detach().float().sum(0).cpu())
+            capture.routed_sum.append(routed_out.detach().float().sum(0).cpu())
+            capture.ntok.append(N)
 
         output = (shared_out + routed_out).view(bsz, seq_len, hidden)
         return output
@@ -120,10 +138,11 @@ class AnalysisBlock(nn.Module):
 
     @torch.inference_mode()
     def forward(self, x, position_ids=None, ablate_experts=None, ablate_shared=False,
-                ablate_routed=False, capture=None):
+                ablate_routed=False, capture=None, shared_sub=None, routed_sub=None):
         h = x + self.ls1 * self.attn(self.attn_norm(x), position_ids)
         moe_out = self.moe(self.ffn_norm(h), ablate_experts=ablate_experts,
-                           ablate_shared=ablate_shared, ablate_routed=ablate_routed, capture=capture)
+                           ablate_shared=ablate_shared, ablate_routed=ablate_routed, capture=capture,
+                           shared_sub=shared_sub, routed_sub=routed_sub)
         return h + self.ls2 * moe_out
 
 
@@ -145,14 +164,18 @@ class AnalysisTransformer(nn.Module):
                 ablate_layer_experts=None,   # dict[layer_idx] -> iterable[int]
                 ablate_shared=False,
                 ablate_routed=False,
-                capture_routing=False):
+                capture_routing=False,
+                shared_subs=None,            # list[Tensor[hidden]] per layer, or None
+                routed_subs=None):
         x = self.embed_tokens(input_ids)
         captures = [] if capture_routing else None
         for li, layer in enumerate(self.layers):
             cap = RoutingCapture() if capture_routing else None
             ael = ablate_layer_experts.get(li) if ablate_layer_experts else None
+            ssub = shared_subs[li] if shared_subs is not None else None
+            rsub = routed_subs[li] if routed_subs is not None else None
             x = layer(x, position_ids, ablate_experts=ael, ablate_shared=ablate_shared,
-                      ablate_routed=ablate_routed, capture=cap)
+                      ablate_routed=ablate_routed, capture=cap, shared_sub=ssub, routed_sub=rsub)
             if capture_routing:
                 captures.append(cap)
         x = self.norm(x)
