@@ -500,7 +500,7 @@ no-shared model at the full budget. 8 layers, 983M tokens, 1 seed each.
 |---|---|---|---|
 | `dense3072` | E=1, k=1, I=3072, no shared, aux/z off (= dense FFN at active width) | 58.2M | **3.11** |
 | `base1b` (ref) | E=8, k=2, I=I_shared=1024 | 133.7M | **3.00** |
-| `noshared983` | E=8, k=2, I=1024, no shared | 121.1M | (running) |
+| `noshared983` | E=8, k=2, I=1024, no shared | 121.1M | **3.03** |
 
 The active-width-matched dense trails the MoE by 0.11 PPL — more than the whole 0.07 band across
 the width configurations. The MoE's extra (inactive) parameters buy something real at this scale,
@@ -509,6 +509,12 @@ baseline: it pays for routing without collecting its benefit.
 
 `dense3072` trajectory (`dense_peek.log`): PPL 4.30 / 3.51 / 3.30 / 3.17 / 3.11 at
 98M / 295M / 491M / 688M / 983M tokens.
+
+`noshared983` adds a second reading: the shared expert itself is worth only 0.03 PPL over its
+absence (3.03 vs 3.00, at 12.6M fewer parameters) — roughly its parameter share, nothing special.
+Its contribution is organizational instead: without it, routed domain NMI at 983M drops to 0.0113
+against the reference's 0.0174, reproducing Finding 4's complementarity at the full budget. The
+hierarchy dense (3.11) < no-shared (3.03) < shared+routed (3.00) holds with modest but real gaps.
 
 ## Reproduction
 
