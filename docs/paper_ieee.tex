@@ -1,4 +1,5 @@
 \documentclass[conference]{IEEEtran}
+\usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{amsmath,amssymb}
@@ -10,8 +11,10 @@
 
 \title{The Shared/Routed Split in Small Mixture-of-Experts\\ Models Is a Design Choice, Not a Diagnosis}
 
-\author{\IEEEauthorblockN{AUTHOR NAMES}
-\IEEEauthorblockA{AFFILIATION\\ email@domain}}
+\author{\IEEEauthorblockN{Rapha\"el Couturier, St\'ephane Cuenat}
+\IEEEauthorblockA{Universit\'e Marie et Louis Pasteur, CNRS,\\
+Institut FEMTO-ST (UMR 6174), Belfort, France\\
+\{raphael.couturier, stephane.cuenat\}@umlp.fr}}
 
 \maketitle
 
@@ -361,15 +364,14 @@ the shape of the dependence rather than a functional law.
 \label{sec:ratio}
 
 The mechanism explains why the shared expert leads and shows that the lead can be reversed. It does
-not say where the split comes to rest, and the natural prediction from the gradient-exposure
-argument, that the resting point should follow $E/k$, turns out to be wrong. We assemble eleven
-8-layer configurations, all at top-2 routing: the five runs of Table~\ref{tab:contrast}, a
-capacity-matched sweep over expert count described below ($E\cdot I$ held at 8192 for
-$E\in\{4,8,16,32\}$), and three runs from an earlier sweep at ratio 1.0 ($E=4$, 16 and 32 at
-$I=I_{\mathrm{shared}}=1024$, 83M to 436M parameters). Ten trained to 983M tokens; the earlier
-$E=4$ run stopped at 491M with its share flat from 295M on. Across all eleven, expert count is
-nearly irrelevant and the ratio of the two branches' widths orders every run.
-Section~\ref{sec:topk} then asks what happens when the routing itself is changed.
+not say where the split comes to rest, and the gradient-exposure argument's natural prediction,
+that the resting point follows $E/k$, turns out to be wrong. We assemble eleven 8-layer
+configurations at top-2 routing: the five runs of Table~\ref{tab:contrast}, a capacity-matched
+sweep over expert count ($E\cdot I = 8192$, $E\in\{4,8,16,32\}$), and three from an earlier
+ratio-1.0 sweep ($E = 4$, 16, 32 at $I=I_{\mathrm{shared}}=1024$, 83M--436M parameters; the $E=4$
+run stopped at 491M, its share flat from 295M on, the rest reached 983M). Expert count proves
+nearly irrelevant and the branch width ratio orders every run; Section~\ref{sec:topk} then varies
+the routing itself.
 
 \begin{table}[t]
 \centering
@@ -417,16 +419,12 @@ that ratio yields bands that do not overlap, as Fig.~\ref{fig:ratio} shows: shar
 The ordering survives an eightfold range in ratio, an eightfold range in expert count and a
 sevenfold range in parameter count.
 
-Expert count does not explain the residual spread within a band, and it does not even act in a
-consistent direction: at ratio 2.0 more experts raise the share, from 0.25 at $E=4$ to 0.37 at
-$E=8$, while at ratio 0.25 more experts lower it, from 0.79 at $E=8$ to 0.72 at $E=32$. A reader
-might still suspect that the sweep confounds expert count with capacity, since a naive sweep over
-$E$ at fixed per-expert width grows the routed branch as it grows $E$. Holding the product
-$E\cdot I$ at 8192 removes that confound and equalizes parameter counts; perplexity is then flat
-across $E\in\{4,8,16,32\}$ at 2.99, 3.00, 3.00 and 3.02, while the share continues to track the
-ratio that the same manipulation necessarily varies. At matched capacity, expert count is thus
-close to a free parameter for perplexity, and it moves the split only within the residual spread
-of a ratio band.
+Expert count neither explains the residual spread within a band nor acts consistently: at ratio 2.0
+more experts raise the share (0.25 at $E=4$ to 0.37 at $E=8$), at ratio 0.25 they lower it (0.79 at
+$E=8$ to 0.72 at $E=32$). Nor is this a capacity confound: holding $E\cdot I = 8192$ equalizes
+parameter counts, and perplexity is then flat across $E\in\{4,8,16,32\}$ at 2.99, 3.00, 3.00 and
+3.02 while the share tracks the ratio that manipulation necessarily varies. Expert count is close
+to a free parameter for perplexity, and moves the split only within a band's residual spread.
 
 \subsection{Does routing granularity enter?}
 \label{sec:topk}
@@ -474,13 +472,11 @@ the routed floating-point cost per token, whereas the width manipulations moved 
 0.25 to 0.81 within a 0.07 band of perplexity. Granularity buys reallocation; it does not buy it
 for nothing.
 
-A natural repair would be a single scalar folding $k$ in, the fraction of \emph{active}
-feed-forward width the shared branch represents, $\phi = I_{\mathrm{shared}}/(I_{\mathrm{shared}}
-+ kI)$. Two further runs test it directly, and refute it. Both hold $k\cdot I = 2048$ and
-$I_{\mathrm{shared}} = 1024$, the same active widths and the same $\phi = 0.33$ as the reference
-configuration ($s_{\min} = 0.47$), and change only how the routed width is delivered: as four
-experts of 512, or as one expert of 2048. If active width were sufficient, both should land near
-0.47. Neither does. Four-of-512 reaches 0.29 (final perplexity 3.06 at 96M parameters), well below
+A natural repair would fold $k$ into a single scalar, the shared branch's share of \emph{active}
+feed-forward width $\phi = I_{\mathrm{shared}}/(I_{\mathrm{shared}} + kI)$. Two runs refute it.
+Both hold $k\cdot I = 2048$ and $I_{\mathrm{shared}} = 1024$ --- the same active widths and the
+same $\phi = 0.33$ as the reference ($s_{\min} = 0.47$) --- and vary only how that width is
+delivered, as four experts of 512 or one of 2048. Both should land near 0.47; neither does. Four-of-512 reaches 0.29 (final perplexity 3.06 at 96M parameters), well below
 the reference, so granularity acts on its own even among $k\geq2$ configurations: the same active
 width delivered through more, narrower experts engages the routed branch more. At matched active
 width and a fixed expert pool, this is a controlled test of DeepSeekMoE's fine-grained segmentation
@@ -557,11 +553,10 @@ fall once the shared branch is starved past it. Engagement and specialization ar
 related but distinct axes, and the distinction is practical: an experimenter who wants routed
 experts that are better objects of interpretability should change the branch widths rather than
 the learning rate, even though both move the split by comparable amounts. We note that domain
-our 16-layer learning-rate runs are
-single-seed, that we exclude comparisons across expert count because NMI grows
-mechanically with the number of experts, and that every value is measured at balancing coefficient
-$10^{-2}$, which suppresses domain NMI relative to unbalanced training, so the magnitudes are
-conditional on that setting even though each contrast is internal to it.
+our 16-layer learning-rate runs are single-seed, that we exclude
+cross-$E$ comparisons because NMI grows mechanically with expert count, and that every value is
+measured at balancing coefficient $10^{-2}$, which suppresses domain NMI, so magnitudes are
+conditional on that setting though each contrast is internal to it.
 
 \section{Discussion}
 
@@ -572,13 +567,11 @@ granularity, moves it further at a cost the first two do not carry. The shared e
 what the routed experts could not; it is doing what it got to first, and it keeps as much as its
 width allows.
 
-Three consequences follow. The first is diagnostic. Expert redundancy cannot be assessed from a
-single early checkpoint, because the measurement at 98M tokens and the measurement at 983M tokens
-disagree, and deeper models remain in the misleading regime longer. Branch importance should be
-reported as a trajectory. The second concerns design: our own early sweep over expert count read
-as a dependence on $E$ only because routed capacity and parameter count rode along with it, and it
-did not survive the matched comparisons of Section~\ref{sec:ratio}; sweeps over architecture
-should fix what they are not testing. The third is prescriptive, and
+Three consequences follow. The first is diagnostic: expert redundancy cannot be read off a single
+early checkpoint, since 98M and 983M tokens disagree and deeper models stay misleading longer, so
+branch importance belongs in a trajectory. The second concerns design: our own early sweep over
+expert count read as a dependence on $E$ only because capacity and parameter count rode along with
+it; sweeps should fix what they are not testing. The third is prescriptive, and
 Section~\ref{sec:spec} makes it sharper than we expected. A modest learning-rate handicap on the
 shared expert engages the routed branch much sooner at no measured cost, and need only be applied
 over the early part of training; but engagement bought that way does not reliably come with
