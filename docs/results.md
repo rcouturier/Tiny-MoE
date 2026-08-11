@@ -580,6 +580,48 @@ have. (Curiosity: both α directions *lower* the share slightly, and α=2.0 lowe
 0.0174 → 0.0122; not interpreted further. Mean-ablation on the α runs: s_mean 0.48 / 0.53,
 tracking s_zero as everywhere else.)
 
+## Finding 16 — `s`(m) is non-monotone: boosting the shared expert also marginalizes it
+
+Motivation: an "incubator" follow-up idea needed a configuration with a healthy parent *and* a
+dominant shared branch, so the detached shared branch (a router-free dense sub-network) could ship
+as a standalone child. Every high-`s` configuration on hand was a bad parent (top-1: `s`=0.97 but
+PPL 3.13, worse than the 58M dense at 3.11). The one untested lever was the other side of
+Finding 9's sweep: **shared-LR multiplier above 1**. 8 layers, E=8, k=2, I=I_shared=1024, 1 seed.
+
+| `m` | 0.1 | 0.3 | **1.0** | 3.0 | 10.0 |
+|---|---|---|---|---|---|
+| `s` @983M | 0.10 | ~0.52 | **0.50** | **0.17** | **0.20** |
+| parent PPL | — | — | 3.00 | 3.02 | 3.09 |
+| Δrm routed | — | — | +2.48 | +3.99 | +4.86 |
+| detached-child PPL | — | — | 5.48 | 7.01 | 7.95 |
+| routed NMI | — | — | 0.0174 | 0.0096 | 0.0058 |
+
+1. **`s` peaks at the neutral multiplier.** Slowing the shared expert marginalizes it (0.10);
+   *accelerating* it marginalizes it too (0.17, 0.20). The naive reading of the gradient-exposure
+   mechanism — more gradient on the shared branch ⇒ more shared dominance — is **false**.
+2. **No divergence.** m=10 trains stably; it is useless, not unstable. Parent PPL degrades mildly
+   and monotonically (3.00 → 3.02 → 3.09).
+3. **Plausible mechanism (untested):** an over-accelerated shared expert converges early onto a
+   mediocre solution and stops learning, while the still-plastic routed experts absorb the rest.
+   Same race, but winning too fast loses. Routed NMI *falls* with m (0.0174 → 0.0058), so the
+   routed branch takes over the computation without specializing — unlike every other route to a
+   low `s`.
+
+**Consequence for the incubator idea: dead.** The detached child (= `basePPL + Δrm routed`, the
+routed-ablation forward is exactly the child) never beats a solo dense model. Best case across all
+18 configurations is top-1's 3.42 at 33M, from a parent that is itself worse than a 58M dense.
+Boosting was the last lever that could have broken the tension; it makes it worse. Total cost of
+the verdict: 8 GPU-hours.
+
+**Consequence for the submitted paper: none.** The paper demonstrates the *handicap* direction
+causally and never claims symmetry; the phrasing "settles it in either direction" was drafted and
+rejected in review, which the data now vindicates. Deliberately **not** added to the manuscript:
+one seed, a non-monotonicity that deserves a mechanistic treatment there is no room for, and the
+paper is at its 8-page limit six days from the deadline. Kept here as follow-up material — *where
+is the maximum, and why is the mechanism not symmetric* is a better question than the incubator was.
+
+Raw tables in `boost.log`.
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
