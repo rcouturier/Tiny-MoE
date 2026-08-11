@@ -68,12 +68,11 @@ branch's share of ablation impact from 0.28 to 0.81, while at identical widths t
 routing land at 0.97 and 0.17. Granularity is the one lever among these that has to be paid for,
 and single-expert routing marks its degenerate end, never engaging the routed branch at all.
 
-Two senses of ``redundant'' must therefore be kept apart. In the ablation sense a branch is
-redundant if removing it is cheap; in the functional sense, if the other branch could have carried
-its work. Our results split the two: with enough training the routed experts are not
-ablation-redundant at all, while the branches prove close to interchangeable in where the
-computation may sit. The diagnostic warning of this paper concerns the first sense; the design
-freedom concerns the second.
+Two senses of ``redundant'' must be kept apart: a branch is ablation-redundant if removing it is
+cheap, functionally redundant if the other could have carried its work. Our results split them.
+With enough training the routed experts are not ablation-redundant at all, while the branches prove
+close to interchangeable in where the computation may sit; this paper's diagnostic warning concerns
+the first sense, its design freedom the second.
 
 Taken together these results reframe the shared/routed split as a largely free design choice.
 Among configurations of comparable size, held-out perplexity varies by less than 0.1 while the
@@ -103,18 +102,15 @@ controlled analogue of that manipulation in isolation. Both arguments concern wh
 represent. Our results concern how the branches are trained and proportioned, and they suggest
 that at small scale the latter consideration dominates.
 
-Observational studies of expert behaviour report that experts organize more by token identity and
-surface form than by topic, both in Mixtral~\cite{jiang2024mixtral} and across training in
-OLMoE~\cite{muennighoff2024olmoe}. These studies characterize the outcome of training. We add a
-controlled causal probe and identify a training-dynamics cause for the small-scale imbalance that
-observational analysis alone cannot isolate.
+Observational studies report that experts organize more by token identity and surface form than by
+topic~\cite{jiang2024mixtral,muennighoff2024olmoe}; these characterize training's outcome, while we
+add a causal probe and a training-dynamics cause.
 
-The mechanism we identify instantiates a broader phenomenon: the early phase of training commits a
-network to structure that later training refines rather than revisits~\cite{achille2019critical,
-frankle2020early}. Routing instability in that same phase motivated StableMoE~\cite{dai2022stablemoe},
-and recent theory studies when a mixture's experts diverge~\cite{chen2022understanding}. Our
-hysteresis experiment tests the commitment claim directly, with a single knob released
-mid-training.
+The mechanism instantiates a broader phenomenon: the early phase of training commits a network to
+structure later training refines rather than revisits~\cite{achille2019critical,frankle2020early},
+a phase whose routing instability motivated StableMoE~\cite{dai2022stablemoe} and whose expert
+divergence has recent theory~\cite{chen2022understanding}. Our hysteresis experiment tests that
+commitment directly.
 
 \section{Experimental Setup}
 
@@ -125,11 +121,10 @@ configuration has $E=8$, $k=2$, 8 layers, hidden size 512, context 512 and 134M 
 expert, routed or shared, has intermediate width 1024. Section~\ref{sec:ratio} varies the two
 widths independently and writes them $I$ per routed expert and $I_{\mathrm{shared}}$ for the shared
 one. Configurations range from 58M to 436M parameters. All runs use AdamW ($\beta_1{=}0.9$,
-$\beta_2{=}0.95$, weight decay 0.1) with cosine decay to zero after 1500 warmup steps, batch 64 at
-sequence length 512, peak learning rate $3\times10^{-4}$, an auxiliary load-balancing coefficient
-of $10^{-2}$ and a router $z$-loss of $10^{-3}$, in bfloat16, with a capacity factor of 1.25 during
-training and no capacity dropping during analysis; 30\,000 steps correspond to 983M tokens. Every
-experiment fits on one RTX A6000.
+$\beta_2{=}0.95$, decay 0.1), cosine to zero after 1500 warmup steps, batch 64 at length 512, peak
+learning rate $3\times10^{-4}$, load-balancing coefficient $10^{-2}$, router $z$-loss $10^{-3}$,
+bfloat16, capacity factor 1.25 in training and none in analysis; 30\,000 steps is 983M tokens, on
+one RTX A6000.
 
 \paragraph{Data} Pre-training streams three token-labelled corpora: FineWeb-Edu~\cite{penedo2024fineweb}
 (60\%), Cosmopedia-v2~\cite{benallal2024cosmopedia} (25\%) and OpenWebMath~\cite{paster2023openwebmath}
@@ -139,10 +134,9 @@ therefore be flattered by near-duplication, but every claim below rests on diffe
 conditions evaluated on the identical stream, not on levels.
 
 \paragraph{Measuring where the computation lives} We ablate a whole branch, either all routed
-experts or the shared expert, and record the resulting increase in held-out perplexity. Ablating a
-single expert is uninformative under top-$k$ routing because the router simply reallocates its
-tokens to the survivors; only whole-branch ablation isolates a branch's contribution. We summarize
-the two measurements by the shared branch's share of total ablation impact,
+experts or the shared expert, and record the increase in held-out perplexity. Single-expert
+ablation is uninformative under top-$k$ routing, since the router reroutes to the survivors. We
+summarize the two measurements by the shared branch's share of total ablation impact,
 \begin{equation}
 s = \frac{\Delta_{\text{shared}}}{\Delta_{\text{shared}} + \Delta_{\text{routed}}},
 \end{equation}
@@ -162,16 +156,40 @@ is worth about its parameter share, its distinctive value being organizational
 
 \paragraph{Is $s$ measuring computation, or output norm?} Zero-ablation perturbs the residual
 stream by an amount that scales with the removed branch's output norm, and both levers studied
-below modulate that norm, so we validated it three ways. Replacing each ablated branch by its
-per-layer mean output rather than zeros reproduces $s$ within 0.04 on every configuration here,
-over a span of 0.10 to 0.97, ordering unchanged. The norm share dissociates from $s$ in both
-directions: under top-1 the routed branch carries 24\% of the norm but 3\% of the impact, and
-under a slowed shared expert the shared branch carries 32\% of the norm but 10\% of it. And
-training with the shared output multiplied by a fixed 2 or 0.5 leaves the split within 0.07 of
-baseline at flat perplexity, the network \emph{absorbing} the scalar by rescaling its weights
-until the trained norm share returns within 0.01 of baseline, whereas the width manipulations,
-which no rescaling absorbs, move the split by up to 0.35. Contribution norm follows function
+below modulate that norm. Table~\ref{tab:valid} validates the statistic. Substituting each ablated
+branch's per-layer mean output for zeros reproduces $s$ within 0.04 everywhere, ordering unchanged.
+The norm share dissociates from $s$ in both directions --- under top-1 the routed branch holds
+24\% of the norm and 3\% of the impact; under a slowed shared expert the shared branch holds 32\%
+of the norm and 10\% of the impact --- so $s$ is no norm readout. And a fixed scalar of 2 or 0.5 on
+the shared output moves the split by at most 0.07 at flat perplexity, the network \emph{absorbing}
+it by rescaling weights until the trained norm share returns within 0.01 of baseline, where width
+manipulations, which no rescaling absorbs, move $s$ by 0.35. Contribution norm follows function
 here; it does not set it.
+
+\begin{table}[t]
+\centering
+\caption{Measurement validity. $s_0$ zero-ablation, $s_\mu$ mean-ablation, $\nu$ norm share, at
+983M tokens (learning-rate rows at 491M). The ordering is identical under both ablations, and
+$\nu$ reaches neither extreme.}
+\label{tab:valid}
+\begin{tabular}{lccc}
+\toprule
+configuration & $s_0$ & $s_\mu$ & $\nu$ \\
+\midrule
+shared LR $\times0.1$        & 0.10 & 0.11 & 0.32 \\
+top-4                        & 0.19 & 0.21 & 0.44 \\
+$I_{\mathrm{shared}}{=}512$    & 0.34 & 0.35 & 0.45 \\
+$I{=}2048$                   & 0.40 & 0.43 & 0.48 \\
+scalar $\times2$             & 0.43 & 0.48 & 0.52 \\
+scalar $\times0.5$           & 0.46 & 0.53 & 0.50 \\
+reference                    & 0.50 & 0.54 & 0.51 \\
+shared LR $\times0.3$        & 0.52 & 0.55 & 0.45 \\
+$I{=}256$                    & 0.80 & 0.81 & 0.61 \\
+$I_{\mathrm{shared}}{=}4096$   & 0.82 & 0.86 & 0.67 \\
+top-1                        & 0.97 & 0.97 & 0.76 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Branch Importance Is a Function of Training Tokens}
 \label{sec:obs}
