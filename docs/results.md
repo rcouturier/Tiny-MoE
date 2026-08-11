@@ -554,6 +554,26 @@ Result over all nine key configurations (2–4 seeds each, final checkpoint):
 Raw table in `meanablate.log`; the zero-vs-mean full trajectories of the width trio and the
 surface-form NMI runs are in the same log.
 
+### The scalar control (2026-08-11): a pure norm intervention does not move the split
+
+Train with the shared expert's output multiplied by a fixed, non-learned α — widths and learning
+rates untouched (`--shared-scale`, `alpha.log`). Under Adam a constant gradient scale largely
+cancels in the adaptive normalization, so α is close to a *pure contribution-norm* intervention.
+1 seed each, 8 layers, 983M tokens:
+
+| | α=0.5 | α=1.0 (`base1b`) | α=2.0 | width lever, for comparison |
+|---|---|---|---|---|
+| min share | 0.43 | 0.47 | 0.42 | 0.28 (`sh512`) / 0.81 (`sh4096`) |
+| share @983M | 0.46 | 0.50 | 0.43 | 0.34 / 0.82 |
+| final PPL | 2.99 | 3.00 | 3.02 | 3.01 / 2.97 |
+| routed NMI | 0.0172 | 0.0174 | 0.0122 | 0.0226 / 0.0103 |
+
+Halving or doubling the shared branch's contribution norm leaves the split within ±0.07 of the
+baseline; the width manipulations move it by ±0.35. **"Width" is not "norm"** — the width lever's
+effect is representational capacity, not output scale. This was the external comment's own
+proposed decisive test, and it comes out against the norm-confound reading. (Curiosity: both α
+directions *lower* the share slightly, and α=2.0 lowers routed NMI; not interpreted further.)
+
 ## Limitations
 
 Pilot scale (134M params, ≤197M tokens, 8 experts, 512 context, single hardware). Even
