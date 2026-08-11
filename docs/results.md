@@ -568,11 +568,17 @@ cancels in the adaptive normalization, so α is close to a *pure contribution-no
 | final PPL | 2.99 | 3.00 | 3.02 | 3.01 / 2.97 |
 | routed NMI | 0.0172 | 0.0174 | 0.0122 | 0.0226 / 0.0103 |
 
-Halving or doubling the shared branch's contribution norm leaves the split within ±0.07 of the
-baseline; the width manipulations move it by ±0.35. **"Width" is not "norm"** — the width lever's
-effect is representational capacity, not output scale. This was the external comment's own
-proposed decisive test, and it comes out against the norm-confound reading. (Curiosity: both α
-directions *lower* the share slightly, and α=2.0 lowers routed NMI; not interpreted further.)
+Halving or doubling the shared branch's output scale leaves the split within ±0.07 of the
+baseline; the width manipulations move it by ±0.35. **"Width" is not "norm"** — and the
+measured norm shares sharpen the point (`ma_alpha.log`): α=2.0 ends at norm share **0.519**,
+α=0.5 at **0.496**, against 0.513 for the baseline. The network *absorbs* the scalar by
+rescaling its weights and restores its norm equilibrium. Contribution norm is homeostatic — it
+follows the functional allocation and cannot even be set exogenously — while width, which no
+rescaling can absorb, moves everything. This was the external comment's own proposed decisive
+test, and it refutes the norm-confound reading more thoroughly than a merely inert scalar would
+have. (Curiosity: both α directions *lower* the share slightly, and α=2.0 lowers routed NMI
+0.0174 → 0.0122; not interpreted further. Mean-ablation on the α runs: s_mean 0.48 / 0.53,
+tracking s_zero as everywhere else.)
 
 ## Limitations
 
