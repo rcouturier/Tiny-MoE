@@ -1,4 +1,33 @@
-# Tiny-MoE
+# Tiny-MoE — shared/routed split study
+
+This repository is a fork of [Tiny-MoE](https://github.com/AbdelrhmanEbied/Tiny-MoE) by
+Abdelrhman Ebied. It holds the code and the run records behind the paper
+
+> R. Couturier, S. Cuenat, P. Gregori, *Determinants of the Shared/Routed Split in Small
+> Mixture-of-Experts Models*, IEEE SmartData 2026.
+
+**Acknowledgement.** The model, training loop and inference code are Abdelrhman Ebied's
+Tiny-MoE, released under the Apache 2.0 licence. We are grateful to him for making it public:
+the whole study is built on it.
+
+**What this fork adds**
+
+- `analysis/` — the experiment toolkit: training driver (`pilot_train.py`, with shared-expert
+  learning-rate multiplier and ramp, independent routed and shared widths), whole-branch ablation
+  and mean-ablation (`race.py`, `meanablate.py`), routing capture and expert–label NMI with a
+  permutation null (`metrics.py`, `multi_axis.py`).
+- `docs/results.md` — the findings log, including retracted results;
+  `docs/branch-split-runs.md` — per-checkpoint tables for every run in the paper, with the exact
+  commands to reproduce them; `docs/paper_ieee.tex` — the paper.
+- Two fixes to the original code, found during the study: a missing causal mask in the absorbed
+  MLA inference path, and a broken CUDA reduction in the load-balancing loss. Every measurement
+  in the paper postdates both.
+
+Every experiment runs on a single 48 GB GPU (about 4 h for an 8-layer run of 983M tokens).
+
+The original Tiny-MoE README follows.
+
+---
 
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)
