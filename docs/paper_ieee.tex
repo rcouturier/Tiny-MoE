@@ -6,8 +6,6 @@
 \usepackage{cite}
 \usepackage{url}
 \graphicspath{{figures/}}
-% Placeholders for the camera-ready runs; replaced once the runs finish.
-\newcommand{\SBOOST}{\textbf{??}}\newcommand{\PBOOST}{\textbf{??}}
 
 % Table notes: roman, set below the rule, distinct from the
 % small-caps caption above the table.
@@ -310,7 +308,7 @@ per-parameter exposure is equal. We note the coincidence without leaning on it: 
 interpolation at a single $k/E$, it holds at one budget only, since by 295M tokens the
 unhandicapped model balances by itself, and the response is not monotone in exposure.
 Accelerating the shared expert instead, at $m=3$ over the full schedule, also lowers $s$, to
-\SBOOST{} at 983M tokens with perplexity \PBOOST{} (two seeds), so the race can be lost by
+0.18 at 983M tokens with perplexity 3.01 (two seeds), so the race can be lost by
 converging too early as well as by learning too slowly. The handicap is the direction we
 characterize.
 
