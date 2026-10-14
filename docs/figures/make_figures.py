@@ -192,12 +192,14 @@ save(fig, "fig3_hysteresis")
 
 
 # ---------- Fig 4: the branch width ratio sets the split ----------
+SH2048_MIN = 0.70  # E=8, I=1024, I_shared=2048 (camera-ready run, two seeds)
 # (ratio I/I_shared, minimum shared share, E) for every configuration measured.
 RUNS = [(2.0, 0.25, 4), (2.0, 0.28, 8), (2.0, 0.37, 8),
         (1.0, 0.47, 8), (1.0, 0.53, 16), (1.0, 0.55, 32), (1.0, 0.56, 4),
-        (0.5, 0.63, 16),
+        (0.5, 0.63, 16), (0.5, SH2048_MIN, 8),
         (0.25, 0.72, 32), (0.25, 0.79, 8), (0.25, 0.81, 8)]
 E_COLOR = {4: ORANGE, 8: BLUE, 16: GREEN, 32: VERM}
+SEED = 0.03  # largest seed spread on s measured across the two-seed configurations
 
 fig, (a1, a2) = plt.subplots(1, 2, figsize=(COL, 1.62))
 style(a1)
@@ -210,6 +212,8 @@ for r in sorted({r for r, _, _ in RUNS}):
             solid_capstyle="round", zorder=1)
 for e in (4, 8, 16, 32):
     pts = [(r, s) for r, s, ee in RUNS if ee == e]
+    a1.errorbar([p[0] for p in pts], [p[1] for p in pts], yerr=SEED, fmt="none",
+                ecolor=E_COLOR[e], elinewidth=0.6, capsize=1.2, alpha=0.7, zorder=2)
     a1.scatter([p[0] for p in pts], [p[1] for p in pts], s=16, color=E_COLOR[e],
                zorder=3, label=f"$E$={e}", edgecolor="white", linewidth=0.5)
 a1.axhline(0.5, color=MUTED, ls=":", lw=0.8, zorder=2)
@@ -221,11 +225,11 @@ a1.set_ylabel("minimum shared share")
 a1.set_ylim(0.12, 0.93)
 a1.legend(loc="lower left", frameon=False, fontsize=6, ncol=2, handletextpad=0.05,
           columnspacing=0.6, borderaxespad=0.2, labelspacing=0.25)
-a1.set_title("(a) eleven runs", color=MUTED)
+a1.set_title("(a) twelve runs", color=MUTED)
 
-# (b) the decisive contrast: the routed branch is identical across all three
-contrast = [0.28, 0.47, 0.81]
-xpos = np.arange(3)
+# (b) the decisive contrast: the routed branch is identical across all four
+contrast = [0.28, 0.47, SH2048_MIN, 0.81]
+xpos = np.arange(4)
 a2.bar(xpos, contrast, color=[GREEN if v < 0.5 else BLUE for v in contrast],
        width=0.6, zorder=3)
 a2.axhline(0.5, color=MUTED, ls=":", lw=0.8, zorder=1)
@@ -233,7 +237,7 @@ for xv, v in zip(xpos, contrast):
     a2.annotate(f"{v:.2f}", (xv, v), xytext=(0, 3), textcoords="offset points",
                 ha="center", fontsize=6.5)
 a2.set_xticks(xpos)
-a2.set_xticklabels(["512", "1024", "4096"])
+a2.set_xticklabels(["512", "1024", "2048", "4096"])
 a2.set_xlabel("shared width  $I_{\\mathrm{shared}}$")
 a2.set_ylim(0, 0.95)
 a2.set_yticks([0, 0.2, 0.4, 0.6, 0.8])

@@ -4,8 +4,10 @@
 \usepackage{booktabs}
 \usepackage{amsmath,amssymb}
 \usepackage{cite}
-\usepackage[hidelinks]{hyperref}
+\usepackage{url}
 \graphicspath{{figures/}}
+% Placeholders for the camera-ready runs; replaced once the runs finish.
+\newcommand{\SBOOST}{\textbf{??}}\newcommand{\PBOOST}{\textbf{??}}
 
 % Table notes: roman, set below the rule, distinct from the
 % small-caps caption above the table.
@@ -115,7 +117,12 @@ finer expert segmentation sharpens specialization, of which Section~\ref{sec:top
 controlled analogue in isolation. Both concern what the branches represent; our results concern
 how they are trained and proportioned, and suggest that at small scale the latter dominates.
 Observational studies report that experts organize more by token identity and surface form than by
-topic~\cite{jiang2024mixtral,muennighoff2024olmoe}; these characterize training's outcome, while we add a causal probe and a dynamical explanation. That mechanism instantiates a broader phenomenon, the early
+topic~\cite{jiang2024mixtral,muennighoff2024olmoe}, and Wang et al.~\cite{wang2026myth} argue that
+routing reflects hidden-state geometry rather than domain expertise; these characterize training's
+outcome, while we add a causal probe and a dynamical explanation. Mouzouni~\cite{mouzouni2026phases}
+finds, across the checkpoints of large open MoEs, that routing passes through distinct phases, so
+that what an early checkpoint shows about load balance is not what training ends with; we reach
+the parallel conclusion for branch importance. Our mechanism instantiates a broader phenomenon, the early
 phase of training committing a network to structure that later training refines rather than
 revisits~\cite{achille2019critical,frankle2020early}, a phase whose routing instability motivated
 StableMoE~\cite{dai2022stablemoe} and whose expert divergence has recent
@@ -123,8 +130,8 @@ theory~\cite{chen2022understanding}.
 
 \section{Experimental Setup}
 
-\paragraph{Model} A decoder-only MoE implemented from scratch in PyTorch, with Multi-head Latent
-Attention~\cite{deepseekv2}, RoPE~\cite{su2021roformer} and RMSNorm~\cite{zhang2019rmsnorm}. Each
+\paragraph{Model} A decoder-only MoE in native PyTorch, built on the open-source Tiny-MoE
+implementation~\cite{ebied2026tinymoe}, with Multi-head Latent Attention~\cite{deepseekv2}, RoPE~\cite{su2021roformer} and RMSNorm~\cite{zhang2019rmsnorm}. Each
 layer carries $E$ routed experts and one shared expert with top-$k$ routing. The reference
 configuration has $E=8$, $k=2$, 8 layers, hidden size 512, context 512 and 134M parameters; every
 expert, routed or shared, has intermediate width 1024. Section~\ref{sec:ratio} varies the two
@@ -152,10 +159,15 @@ $s = \Delta_{\text{shared}}/(\Delta_{\text{shared}} + \Delta_{\text{routed}})$, 
 denotes branches of equal importance and $s\rightarrow1$ a shared-dominated model. Almost every
 trajectory dips to a minimum and then rises slowly, the exception being the top-1 configurations
 of Section~\ref{sec:topk}, which decline monotonically; we therefore report the minimum reached
-over the trajectory and, where the endpoint matters, the value at 983M tokens. Conditions are
-single runs unless stated otherwise; the eight configurations for which we ran a second seed or a
-replicate, spanning both depths, put the spread on $s$ at 0.03 or less, an order of magnitude
-below every effect discussed here. As a reference point, a dense feed-forward network at the reference model's active width (58M parameters) reaches perplexity 3.11 at 983M tokens against the reference MoE's
+over the trajectory and, where the endpoint matters, the value at 983M tokens. Every configuration
+in Tables~\ref{tab:lr}, \ref{tab:contrast} and~\ref{tab:topk} has at least two seeds, four for
+the reference, which covers top-1 and both extremes of the width ratio, where the trajectories
+behave least alike; across them the seed standard deviation on $s$ is at most 0.03, and under
+0.01 at top-1, an order of magnitude below every effect discussed here. Single-seed runs are
+identified where they appear. We report perplexity and ablation impact rather than downstream
+accuracy because at this scale standard benchmarks sit near chance and would not resolve the
+differences studied here; the question is where the computation lives, not what it is worth on a task.
+As a reference point, a dense feed-forward network at the reference model's active width (58M parameters) reaches perplexity 3.11 at 983M tokens against the reference MoE's
 3.00, and a variant trained without the shared expert reaches 3.03: the architecture justifies its inactive parameters, while the always-on branch contributes roughly in proportion to its parameter share, its distinctive contribution being organizational (Section~\ref{sec:spec}).
 
 \paragraph{Whether $s$ measures computation or output norm} Zero-ablation perturbs the residual
@@ -292,6 +304,16 @@ shared expert is slowed, so the shared expert is not necessary for the computati
 the baseline. The allocation reflects the rate at which each branch learns, not a requirement of
 the computation.
 
+Interpolating Table~\ref{tab:lr} in $\log m$, the branches would balance at 98M tokens near
+$m\approx0.26$, and near 0.21 in the 16-layer sweep below, close to the $k/E=0.25$ at which
+per-parameter exposure is equal. We note the coincidence without leaning on it: it is a two-point
+interpolation at a single $k/E$, it holds at one budget only, since by 295M tokens the
+unhandicapped model balances by itself, and the response is not monotone in exposure.
+Accelerating the shared expert instead, at $m=3$ over the full schedule, also lowers $s$, to
+\SBOOST{} at 983M tokens with perplexity \PBOOST{} (two seeds), so the race can be lost by
+converging too early as well as by learning too slowly. The handicap is the direction we
+characterize.
+
 A mechanism specific to one depth would be of limited interest, so we repeat the
 sweep at 16 layers, where it reproduces almost exactly (Fig.~\ref{fig:lr}b): the shared share at
 98M tokens falls from 0.82 to 0.64 to 0.21 across the same three multipliers, against 0.80, 0.56
@@ -340,8 +362,8 @@ and one handicap strength, so we report the shape of the dependence rather than 
 
 The mechanism explains why the shared expert leads and shows that the lead can be reversed. It
 does not say where the split comes to rest, and the natural prediction that the resting point
-follows $E/k$ is not borne out. We assemble eleven 8-layer configurations at top-2 routing: the
-five runs of Table~\ref{tab:contrast}, a capacity-matched sweep over expert count ($E\cdot I =
+follows $E/k$ is not borne out. We assemble twelve 8-layer configurations at top-2 routing: the
+six runs of Table~\ref{tab:contrast}, a capacity-matched sweep over expert count ($E\cdot I =
 8192$, $E\in\{4,8,16,32\}$), and three from an earlier ratio-1.0 sweep ($E = 4$, 16, 32 at
 $I=I_{\mathrm{shared}}=1024$, 83M--436M parameters; the $E=4$ run stopped at 491M with its share
 flat from 295M on, the rest reached 983M).
@@ -351,28 +373,32 @@ flat from 295M on, the rest reached 983M).
 \caption{Branch Width Contrasts}
 \label{tab:contrast}
 \vspace{4pt}
-\begin{tabular}{rrrrr}
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{rrrrrrr}
 \toprule
-$I$ & $I_{\mathrm{shared}}$ & parameters & $s_{\min}$ & $s$ at 983M \\
+$I$ & $I_{\mathrm{shared}}$ & params & $\Delta_{\mathrm{sh}}$ & $\Delta_{\mathrm{rt}}$ & $s_{\min}$ & $s$ \\
 \midrule
-\multicolumn{5}{l}{\textsc{varying routed width}}\\
-256  & 1024 & 58.2M  & 0.79 & 0.80 \\
-1024 & 1024 & 133.7M & 0.47 & 0.50 \\
-2048 & 1024 & 234.4M & 0.37 & 0.40 \\
+\multicolumn{7}{l}{\textsc{varying routed width}}\\
+256  & 1024 & 58.2M  & $+5.48$ & $+1.39$ & 0.79 & 0.80 \\
+1024 & 1024 & 133.7M & $+2.45$ & $+2.48$ & 0.47 & 0.50 \\
+2048 & 1024 & 234.4M & $+1.95$ & $+2.86$ & 0.37 & 0.40 \\
 \midrule
-\multicolumn{5}{l}{\textsc{varying shared width}}\\
-1024 & 512  & 127.4M & 0.28 & 0.34 \\
-1024 & 1024 & 133.7M & 0.47 & 0.50 \\
-1024 & 4096 & 171.5M & 0.81 & 0.82 \\
+\multicolumn{7}{l}{\textsc{varying shared width}}\\
+1024 & 512  & 127.4M & $+1.61$ & $+3.19$ & 0.28 & 0.34 \\
+1024 & 1024 & 133.7M & $+2.45$ & $+2.48$ & 0.47 & 0.50 \\
+1024 & 2048 & 146.3M & $+3.88$ & $+1.54$ & 0.70 & 0.72 \\
+1024 & 4096 & 171.5M & $+5.29$ & $+1.18$ & 0.81 & 0.82 \\
 \bottomrule
 \end{tabular}
-\tabnote{All runs at $E{=}8$, $k{=}2$. In the lower block the routed branch is identical
-across the three runs.}
+\tabnote{All runs at $E{=}8$, $k{=}2$, two seeds each, four for the reference. Ablation impacts
+$\Delta$ (increase in held-out PPL) and $s$ at 983M tokens, $s_{\min}$ over the trajectory. In the
+lower block the routed branch is identical across the four runs.}
 \end{table}
 
 Table~\ref{tab:contrast} isolates the two candidates. Both contrasts hold $E=8$ and $k=2$ fixed,
 so expert count, routing and per-expert gradient share are constant throughout. The second is
-decisive: with $I$ pinned at 1024 the routed branch is identical across the three runs, the same
+decisive: with $I$ pinned at 1024 the routed branch is identical across the four runs, the same
 number of experts of the same width receiving the same routed capacity $k\cdot I = 2048$, and yet
 the split moves by 0.53 (Fig.~\ref{fig:ratio}b). Whatever governs the resting point, it is not the
 absolute capacity of the routed branch.
@@ -381,15 +407,20 @@ absolute capacity of the routed branch.
 \centering
 \includegraphics[width=\linewidth]{fig4_ratio.pdf}
 \caption{(a) Minimum shared share against the branch width ratio, one point per configuration,
-coloured by expert count; the bands at each ratio do not overlap. (b) The decisive contrast, in
-which the routed branch is identical across all three runs.}
+coloured by expert count, with bars of $\pm0.03$, the largest seed spread measured; the bands at
+each ratio do not overlap. (b) The decisive contrast, in
+which the routed branch is identical across all four runs.}
 \label{fig:ratio}
 \end{figure}
 
 What the two contrasts share is the ratio $I/I_{\mathrm{shared}}$. Grouping every configuration by
 that ratio yields bands that do not overlap (Fig.~\ref{fig:ratio}a): shared shares of 0.72--0.81
-at ratio 0.25, 0.63 at ratio 0.5 (a single configuration), 0.47--0.56 at ratio 1.0 and 0.25--0.37
-at ratio 2.0. The ordering survives an eightfold range in ratio, an eightfold range in expert
+at ratio 0.25, 0.63--0.70 at ratio 0.5, 0.47--0.56 at ratio 1.0 and 0.25--0.37 at ratio 2.0. The
+ratio-0.5 band is reached from both sides, by narrowing the routed experts at $E=16$ and by
+widening the shared one at $E=8$, and lies 0.07 above the ratio-1.0 band, more than twice the seed
+spread. Its upper end comes within 0.02 of the ratio-0.25 band, a margin the seed spread does not
+resolve; the two are told apart only at fixed expert count, where the four $E=8$ ratios order
+cleanly at 0.28, 0.47, 0.70 and 0.81. The ordering survives an eightfold range in ratio, an eightfold range in expert
 count and a sevenfold range in parameter count.
 
 Expert count neither explains the residual spread within a band nor acts consistently: at ratio
@@ -412,17 +443,19 @@ width ratio is 1.0 throughout, and varying only $k$.
 \caption{Routing Granularity at Fixed Widths}
 \label{tab:topk}
 \vspace{4pt}
-\begin{tabular}{rrrrr}
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{rrrrrrr}
 \toprule
-$k$ & $s_{\min}$ & $s$ at 983M & PPL & routed NMI \\
+$k$ & $\Delta_{\mathrm{sh}}$ & $\Delta_{\mathrm{rt}}$ & $s_{\min}$ & $s$ & PPL & routed NMI \\
 \midrule
-1 & 0.97 & 0.97 & 3.13 & 0.0003 \\
-2 & 0.47 & 0.50 & 3.00 & 0.0174 \\
-4 & 0.17 & 0.19 & 2.99 & 0.0235 \\
+1 & $+8.89$ & $+0.29$ & 0.97 & 0.97 & 3.13 & 0.0003 \\
+2 & $+2.45$ & $+2.48$ & 0.47 & 0.50 & 3.00 & 0.0174 \\
+4 & $+0.95$ & $+3.95$ & 0.17 & 0.19 & 2.99 & 0.0235 \\
 \bottomrule
 \end{tabular}
 \tabnote{Widths held at $I{=}I_{\mathrm{shared}}{=}1024$ with $E{=}8$; two seeds per
-condition, four at $k{=}2$. PPL and NMI at 983M tokens.}
+condition, four at $k{=}2$. All columns but $s_{\min}$ at 983M tokens.}
 \end{table}
 
 Table~\ref{tab:topk} shows that $k$ enters, and that it is the strongest single lever in this
@@ -432,7 +465,11 @@ therefore be read as holding at fixed routing. This refines rather than refutes 
 prediction of Section~\ref{sec:mech}: it fails on the $E$ axis, where varying $E$ from 4 to 32 at
 a fixed width ratio leaves the split within the single band 0.47--0.56 and not even in a
 consistent direction, but succeeds on the $k$ axis and in the predicted direction. What fails is
-the \emph{ratio} $k/E$; what survives is $k$ alone.
+the \emph{ratio} $k/E$; what survives is $k$ alone. Counted per branch rather than per parameter,
+the routed branch receives $k$ expert passes per token whatever $E$, against one for the shared
+branch, which matches the direction observed; weighting those passes by width, however, yields the
+active-width share $\phi$ introduced below, which two runs refute, so the count organizes the $k$
+axis without becoming a law.
 
 Unlike the width ratio, this lever incurs a cost. Top-1 costs 0.13 in perplexity and top-4 doubles
 the routed floating-point cost per token, whereas the width manipulations moved the split across
@@ -460,7 +497,7 @@ the shared share further; and single-expert routing never engages the routed bra
 we tested. These results compose with the mechanism. The gradient race decides which branch
 arrives first, the branch proportion and routing granularity where the allocation settles once it
 is over. The width manipulations are reparametrizations rather than levers on quality, moving the
-shared share from 0.25 to 0.81 across the seven 127M--234M configurations at perplexity 2.95 to
+shared share from 0.25 to 0.81 across the eight 127M--234M configurations at perplexity 2.95 to
 3.02.
 
 \section{Reallocation and Routed Specialization}
@@ -470,7 +507,9 @@ The motivation for wanting routed experts engaged is usually that they are the o
 it matters whether experts forced to carry more computation also organize their work more sharply.
 We measure gate-weighted normalized mutual information between expert assignment and the domain
 label of each token, comparing at matched training steps and, where possible, at identical routed
-architecture (Fig.~\ref{fig:spec}). The result is not uniform across the two levers.
+architecture (Fig.~\ref{fig:spec}). Shuffling the domain labels over the same tokens gives a
+permutation null below $10^{-4}$ wherever we computed it, so the values below, small in absolute
+terms, sit two orders of magnitude above chance, top-1 excepted. The result is not uniform across the two levers.
 
 \begin{figure}[t]
 \centering
@@ -490,7 +529,12 @@ point the same way, their routed NMI rising from 0.0003 at top-1 to 0.0235 at to
 four experts of width 512. Nor is the gain specific to the domain axis: across the same width
 trio, surface-form NMI rises from 0.118 to 0.141 and frequency NMI from 0.039 to 0.056, with
 position at the control floor throughout, though the headline factor of 2.2 is domain-specific and
-the surface-form gain a more modest 1.2. Deleting the shared expert makes the same point from the
+the surface-form gain a more modest 1.2. In absolute terms surface form, four lexical classes
+against three domains, carries six to twelve times more routing information than domain: the
+experts organize first by form, as the observational literature reports~\cite{jiang2024mixtral,muennighoff2024olmoe} and as a
+geometric account
+of routing predicts~\cite{wang2026myth}. The data-centric claim is accordingly not that the routed
+experts are domain experts, but that how much domain structure they carry is set by the design. Deleting the shared expert makes the same point from the
 other side: routed domain NMI falls to 0.0113 without it, so the always-on branch, whose absence
 costs only 0.03 perplexity when the model is trained without it, increases rather than decreases
 the organization of the routed experts.
@@ -511,7 +555,8 @@ related but distinct axes, and the distinction is practical: experiments requiri
 interpretable routed experts should vary the branch widths rather than the learning rate, even
 though both move the split by comparable amounts. We exclude cross-$E$ comparisons because NMI
 grows mechanically with expert count, and every value is measured at balancing coefficient
-$10^{-2}$, which suppresses domain NMI, so magnitudes are conditional on that setting though each
+$10^{-2}$, which suppresses domain NMI, plausibly by the suppression of shared hidden-state
+directions that Wang et al.\ attribute to the balancing loss~\cite{wang2026myth}, so magnitudes are conditional on that setting though each
 contrast is internal to it.
 
 \section{Discussion and Conclusion}
@@ -547,33 +592,41 @@ design variable: the same corpus, the same token budget and the same routed para
 that treats expert--data alignment as a fixed property of a trained model will mis-attribute in
 proportion to how early it looks and how the branches were sized.
 
-Several limits bound these claims, and concern generality rather than internal validity. All
-models fall between 58M and 436M parameters and see at most 983M tokens, on one data mixture and
-one hardware configuration; whether the crossover and the controls persist at production scale is
-the obvious next question. The width-ratio result is an ordering over an eightfold range at one
-depth, not a functional form, and no single scalar we tried subsumes width and routing at once.
-The dose-response is replicated at one endpoint, its other points resting on a single seed each.
-Finally, our evidence is perplexity, ablation impact and routing statistics: at this scale
-standard benchmarks are near chance, so whether a reallocated split changes downstream behaviour,
-which is what a practitioner would ultimately want, needs a larger model to answer.
+Several limits bound these claims, and concern generality rather than internal validity. Every
+model is a DeepSeek-style MoE with a single shared expert, between 58M and 436M parameters, trained
+for at most 983M tokens on one data mixture and one hardware configuration. What is established is
+the internal account at that scale; whether the crossover, the controls and the width ordering
+transfer to models of billions of parameters, to other shared-expert layouts and to other corpora
+is open, and is the first thing we intend to test. The width-ratio result is an ordering over an
+eightfold range at one depth, not a functional form, and no single scalar we tried subsumes width
+and routing at once. The dose-response is replicated at one endpoint, its other points resting on
+a single seed each. Finally, our evidence is perplexity, ablation impact and routing statistics:
+at this scale standard benchmarks are near chance, so whether a reallocated split changes
+downstream behaviour, reasoning or the quality of generated answers, which is what a practitioner
+would ultimately want, needs a larger model to answer.
 
 Routed experts in small Mixture-of-Experts models are therefore not redundant in the ablation
 sense: they are out-competed early by a shared expert that receives gradient from every token.
-Where such a model puts its feed-forward computation is, to a good approximation, something the
-designer chooses rather than something the model discovers.
+At the scale we studied, where such a model puts its feed-forward computation is, to a good
+approximation, something the designer chooses rather than something the model discovers.
 
 \section*{Reproducibility}
 
 The model, the training code and the analysis toolkit, including whole-branch ablation and routing
-capture, will be released on acceptance with the run configurations and the per-checkpoint
+capture, are available at \url{https://github.com/rcouturier/Tiny-MoE} with the run configurations and the per-checkpoint
 measurements behind every table and figure here; every experiment runs on a single GPU. Two
 defects found and fixed during the study, a missing causal mask in the absorbed attention
 inference path and a broken CUDA reduction in the load-balancing loss, are recorded in the
 accompanying version history, and every measurement reported here postdates both fixes.
 
+\section*{Acknowledgment}
+
+We thank Abdelrhman Ebied for releasing Tiny-MoE~\cite{ebied2026tinymoe}, on which every model in
+this study is built.
+
 {\footnotesize
 % Balance the two reference columns on the final page.
-\IEEEtriggeratref{9}
+%\IEEEtriggeratref{9}
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 }
