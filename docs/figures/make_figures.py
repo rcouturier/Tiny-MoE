@@ -28,6 +28,7 @@ mpl.rcParams.update({
     "lines.linewidth": 1.4, "lines.markersize": 3,
     "axes.spines.top": False, "axes.spines.right": False,
     "font.family": "DejaVu Sans",
+    "pdf.fonttype": 42, "ps.fonttype": 42,  # TrueType, not Type 3 (IEEE PDF eXpress)
 })
 
 

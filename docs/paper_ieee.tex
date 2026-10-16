@@ -7,6 +7,12 @@
 \usepackage{url}
 \graphicspath{{figures/}}
 
+% EDAS margin checker: keep all ink at least 0.75in from the top edge
+% and the column gutter at least 0.24in wide.
+\addtolength{\topmargin}{0.06in}
+\addtolength{\textheight}{-0.06in}
+\setlength{\columnsep}{0.27in}
+
 % Table notes: roman, set below the rule, distinct from the
 % small-caps caption above the table.
 \newcommand{\tabnote}[1]{\vspace{5pt}\parbox{\columnwidth}{\footnotesize #1}}
