@@ -295,8 +295,7 @@ itself only slowly. The response is monotone in duration: the share at 983M toke
 0.21 and 0.19 for handicaps lifted at 98M, 197M, 295M and 491M tokens, against 0.59 with no
 handicap and 0.14 for a handicap never lifted.
 
-Three features of that curve matter more than its monotonicity. A brief handicap already produces
-most of the effect: lifting it after 98M tokens, one tenth of the budget, reaches 0.33, more than
+A brief handicap already produces most of the effect: lifting it after 98M tokens, one tenth of the budget, reaches 0.33, more than
 half of the distance from the baseline to the never-lifted limit. The increments then shrink
 (0.07, 0.05, 0.02), yet the never-lifted limit sits a further 0.05 below the longest ramp, so the
 response flattens without plateauing in our range. Releasing the handicap is also marginally
@@ -503,9 +502,8 @@ runs, but the unhandicapped baseline falls inside their range rather than below 
 What these disagreements share is that specialization tracks how much the routed branch has
 genuinely been trained, which rises as it takes over computation but flattens near balance and can
 fall once the shared branch is starved past it. Engagement and specialization are therefore
-related but distinct axes, and the distinction is practical: experiments requiring more
-interpretable routed experts should vary the branch widths rather than the learning rate, even
-though both move the split by comparable amounts. We exclude cross-$E$ comparisons because NMI
+distinct axes: experiments requiring more interpretable routed experts should vary the branch
+widths rather than the learning rate. We exclude cross-$E$ comparisons because NMI
 grows mechanically with expert count, and every value is measured at balancing coefficient
 $10^{-2}$, which suppresses domain NMI, plausibly by the suppression of shared hidden-state
 directions that Wang et al.\ attribute to the balancing loss~\cite{wang2026myth}, so magnitudes are conditional on that setting though each
@@ -560,12 +558,15 @@ approximation, something the designer chooses rather than something the model di
 
 The model, the training code and the analysis toolkit, including whole-branch ablation and routing
 capture, are available at \url{https://github.com/rcouturier/Tiny-MoE} with the run configurations and the per-checkpoint
-measurements behind every table and figure here; every experiment runs on a single GPU. 
+measurements behind every table and figure here. 
 
 \section*{Acknowledgment}
 
 We thank Abdelrhman Ebied for releasing Tiny-MoE~\cite{ebied2026tinymoe}, on which every model in
-this study is built.
+this study is built. This work was granted access to the HPC resources of IDRIS under the
+allocation AD010613582R4 made by GENCI. We also thank the Mesocentre of Franche-Comt\'e for the
+computing resources. This work was also supported by the EIPHI Graduate School (contract
+No.\ ANR-17-EURE-0002).
 
 {\footnotesize
 % Balance the two reference columns on the final page.
